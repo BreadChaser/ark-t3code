@@ -11,11 +11,22 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
 const DEFAULT_SESSION = "ark-main";
+export const ARK_OPEN_SESSION_EVENT = "ark:open-session";
+
+type ArkSessionTarget = Pick<ArkTmuxSession, "name" | "machineIp" | "machineName">;
+
+function sessionKey(session: ArkSessionTarget): string {
+  return `${session.machineIp ?? "local"}:${session.name}`;
+}
+
+function machineLabel(session: ArkSessionTarget): string {
+  return session.machineName ?? (session.machineIp ? session.machineIp : "This device");
+}
 
 function sessionLabel(session: ArkTmuxSession): string {
   const windows = session.windows === null ? "?" : String(session.windows);
   const attached = session.attached === null ? "?" : String(session.attached);
-  return `${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
+  return `${machineLabel(session)} - ${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
 }
 
 export function ArkHome() {
@@ -35,16 +46,16 @@ export function ArkHome() {
   const stopTmux = useAtomCommand(arkEnvironment.stopTmux, { reportFailure: false });
 
   const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
-  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState<ArkSessionTarget | null>(null);
   const [terminalText, setTerminalText] = useState("");
   const [draft, setDraft] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const latestSelectedName = useRef<string | null>(null);
+  const latestSelectedKey = useRef<string | null>(null);
 
   useEffect(() => {
-    latestSelectedName.current = selectedName;
-  }, [selectedName]);
+    latestSelectedKey.current = selectedSession === null ? null : sessionKey(selectedSession);
+  }, [selectedSession]);
 
   const refreshSessions = useCallback(
     async (showError = false) => {
@@ -57,30 +68,40 @@ export function ArkHome() {
       }
 
       const sorted = [...result.value.sessions].sort((a, b) => {
+        if (a.machineSelf !== b.machineSelf) return a.machineSelf ? -1 : 1;
+        const machineSort = machineLabel(a).localeCompare(machineLabel(b));
+        if (machineSort !== 0) return machineSort;
         if (a.ark !== b.ark) return a.ark ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
       setSessions(sorted);
       setError(null);
-      setSelectedName((current) => current ?? sorted[0]?.name ?? null);
+      setSelectedSession((current) =>
+        current === null
+          ? (sorted[0] ?? null)
+          : (sorted.find((session) => sessionKey(session) === sessionKey(current)) ?? current),
+      );
     },
     [environmentId, listTmuxSessions],
   );
 
   const captureSelected = useCallback(
-    async (name: string) => {
+    async (target: ArkSessionTarget) => {
       if (environmentId === null) return;
 
-      const result = await captureTmux({ environmentId, input: { name, scroll: 900 } });
+      const result = await captureTmux({
+        environmentId,
+        input: { name: target.name, machineIp: target.machineIp, scroll: 900 },
+      });
       if (result._tag === "Failure") {
-        if (latestSelectedName.current === name) {
+        if (latestSelectedKey.current === sessionKey(target)) {
           setTerminalText("");
-          setError(`Could not read ${name}.`);
+          setError(`Could not read ${target.name}.`);
         }
         return;
       }
 
-      if (latestSelectedName.current === name) {
+      if (latestSelectedKey.current === sessionKey(target)) {
         setTerminalText(result.value.text.trimEnd());
         setError(null);
       }
@@ -89,68 +110,94 @@ export function ArkHome() {
   );
 
   const openSession = useCallback(
-    async (name: string) => {
+    async (target: ArkSessionTarget | string) => {
       if (environmentId === null) return;
+      const session = typeof target === "string" ? { name: target } : target;
       setIsBusy(true);
-      const result = await ensureTmux({ environmentId, input: { name } });
+      const result = await ensureTmux({
+        environmentId,
+        input: { name: session.name, machineIp: session.machineIp },
+      });
       setIsBusy(false);
       if (result._tag === "Failure") {
-        setError(`Could not open ${name}.`);
+        setError(`Could not open ${session.name}.`);
         return;
       }
 
-      setSelectedName(name);
+      setSelectedSession(session);
       await refreshSessions();
-      await captureSelected(name);
+      await captureSelected(session);
     },
     [captureSelected, ensureTmux, environmentId, refreshSessions],
   );
 
   const sendDraft = useCallback(async () => {
     const text = draft;
-    if (environmentId === null || selectedName === null || text.trim().length === 0) return;
+    if (environmentId === null || selectedSession === null || text.trim().length === 0) return;
 
     setDraft("");
     const result = await sendTmuxText({
       environmentId,
-      input: { name: selectedName, text, submit: true },
+      input: {
+        name: selectedSession.name,
+        machineIp: selectedSession.machineIp,
+        text,
+        submit: true,
+      },
     });
     if (result._tag === "Failure") {
       setDraft(text);
-      setError(`Could not send to ${selectedName}.`);
+      setError(`Could not send to ${selectedSession.name}.`);
       return;
     }
 
-    await captureSelected(selectedName);
-  }, [captureSelected, draft, environmentId, selectedName, sendTmuxText]);
+    await captureSelected(selectedSession);
+  }, [captureSelected, draft, environmentId, selectedSession, sendTmuxText]);
 
   const stopSelected = useCallback(async () => {
-    if (environmentId === null || selectedName === null) return;
+    if (environmentId === null || selectedSession === null) return;
 
-    const name = selectedName;
-    const result = await stopTmux({ environmentId, input: { name } });
+    const target = selectedSession;
+    const result = await stopTmux({
+      environmentId,
+      input: { name: target.name, machineIp: target.machineIp },
+    });
     if (result._tag === "Failure") {
-      setError(`Could not stop ${name}.`);
+      setError(`Could not stop ${target.name}.`);
       return;
     }
 
-    setSelectedName(null);
+    setSelectedSession(null);
     setTerminalText("");
     await refreshSessions();
-  }, [environmentId, refreshSessions, selectedName, stopTmux]);
+  }, [environmentId, refreshSessions, selectedSession, stopTmux]);
 
   useEffect(() => {
     void refreshSessions();
+    const timers = [
+      window.setTimeout(() => void refreshSessions(), 3000),
+      window.setTimeout(() => void refreshSessions(), 9000),
+    ];
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [refreshSessions]);
 
   useEffect(() => {
-    if (selectedName === null) return;
-    void captureSelected(selectedName);
+    if (selectedSession === null) return;
+    void captureSelected(selectedSession);
     const interval = window.setInterval(() => {
-      void captureSelected(selectedName);
+      void captureSelected(selectedSession);
     }, 1200);
     return () => window.clearInterval(interval);
-  }, [captureSelected, selectedName]);
+  }, [captureSelected, selectedSession]);
+
+  useEffect(() => {
+    const handleOpenSession = (event: Event) => {
+      const detail = (event as CustomEvent<ArkSessionTarget>).detail;
+      if (detail?.name) void openSession(detail);
+    };
+    window.addEventListener(ARK_OPEN_SESSION_EVENT, handleOpenSession);
+    return () => window.removeEventListener(ARK_OPEN_SESSION_EVENT, handleOpenSession);
+  }, [openSession]);
 
   if (environmentId === null) {
     return (
@@ -204,7 +251,9 @@ export function ArkHome() {
               <button
                 className={cn(
                   "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent",
-                  selectedName === session.name && "bg-accent text-accent-foreground",
+                  selectedSession !== null &&
+                    sessionKey(selectedSession) === sessionKey(session) &&
+                    "bg-accent text-accent-foreground",
                 )}
                 key={session.name}
                 type="button"
@@ -226,15 +275,17 @@ export function ArkHome() {
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-foreground">
-                {selectedName ?? "No session selected"}
+                {selectedSession?.name ?? "No session selected"}
               </div>
-              <div className="text-xs text-muted-foreground">Live tmux capture</div>
+              <div className="text-xs text-muted-foreground">
+                {selectedSession === null ? "Live tmux capture" : machineLabel(selectedSession)}
+              </div>
             </div>
             <Button
               size="sm"
               variant="destructive-outline"
               onClick={() => void stopSelected()}
-              disabled={selectedName === null}
+              disabled={selectedSession === null}
             >
               <SquareIcon />
               Stop
@@ -243,7 +294,7 @@ export function ArkHome() {
 
           <div className="min-h-0 flex-1 overflow-auto p-3">
             <div className="max-w-[980px] rounded-lg border border-amber-500/25 bg-[#151109] px-3 py-3 font-mono text-[13px] leading-5 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.10)]">
-              {selectedName === null ? (
+              {selectedSession === null ? (
                 <span className="text-amber-200/55">Open a tmux session to start.</span>
               ) : terminalText.length === 0 ? (
                 <span className="text-amber-200/55">Waiting for terminal output...</span>
@@ -263,7 +314,7 @@ export function ArkHome() {
             <div className="flex gap-2">
               <Textarea
                 className="flex-1"
-                disabled={selectedName === null}
+                disabled={selectedSession === null}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -272,12 +323,17 @@ export function ArkHome() {
                   }
                 }}
                 placeholder={
-                  selectedName === null ? "Open a session first" : `Send to ${selectedName}`
+                  selectedSession === null
+                    ? "Open a session first"
+                    : `Send to ${selectedSession.name}`
                 }
                 rows={2}
                 value={draft}
               />
-              <Button disabled={selectedName === null || draft.trim().length === 0} type="submit">
+              <Button
+                disabled={selectedSession === null || draft.trim().length === 0}
+                type="submit"
+              >
                 <SendIcon />
                 Send
               </Button>

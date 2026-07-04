@@ -167,7 +167,8 @@ interface AddProjectEnvironmentOption {
 function tmuxSessionDescription(session: ArkTmuxSession): string {
   const windows = session.windows === null ? "?" : String(session.windows);
   const attached = session.attached === null ? "?" : String(session.attached);
-  return `${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
+  const machine = session.machineName ?? (session.machineIp ? session.machineIp : "This device");
+  return `${machine} - ${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
 }
 
 type AddProjectRemoteProviderKind = Extract<
@@ -823,8 +824,8 @@ function OpenCommandPaletteDialog(props: {
   }, []);
 
   const ensureTmuxSession = useCallback(
-    async (environmentId: EnvironmentId, name: string): Promise<void> => {
-      const result = await ensureTmux({ environmentId, input: { name } });
+    async (environmentId: EnvironmentId, name: string, machineIp?: string): Promise<void> => {
+      const result = await ensureTmux({ environmentId, input: { name, machineIp } });
       if (result._tag === "Failure") {
         if (!isAtomCommandInterrupted(result)) {
           toastManager.add(
@@ -880,13 +881,20 @@ function OpenCommandPaletteDialog(props: {
         ...sessions.map(
           (session): CommandPaletteActionItem => ({
             kind: "action",
-            value: `action:add-project:${environmentId}:tmux:${session.name}`,
-            searchTerms: ["tmux", "session", "terminal", session.name, session.ark ? "ark" : ""],
+            value: `action:add-project:${environmentId}:tmux:${session.machineIp ?? "local"}:${session.name}`,
+            searchTerms: [
+              "tmux",
+              "session",
+              "terminal",
+              session.name,
+              session.machineName ?? "",
+              session.ark ? "ark" : "",
+            ],
             title: session.name,
             description: tmuxSessionDescription(session),
             icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
             run: async () => {
-              await ensureTmuxSession(environmentId, session.name);
+              await ensureTmuxSession(environmentId, session.name, session.machineIp);
             },
           }),
         ),

@@ -19,6 +19,11 @@ export const ArkTmuxSession = Schema.Struct({
   attached: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   created: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   ark: Schema.Boolean,
+  machineId: Schema.optional(Schema.String),
+  machineName: Schema.optional(Schema.String),
+  machineIp: Schema.optional(Schema.String),
+  machineOnline: Schema.optional(Schema.Boolean),
+  machineSelf: Schema.optional(Schema.Boolean),
 });
 export type ArkTmuxSession = typeof ArkTmuxSession.Type;
 
@@ -34,11 +39,13 @@ export type ArkListTmuxSessionsResult = typeof ArkListTmuxSessionsResult.Type;
 
 export const ArkTmuxInput = Schema.Struct({
   name: ArkTmuxName,
+  machineIp: Schema.optional(Schema.String),
 });
 export type ArkTmuxInput = typeof ArkTmuxInput.Type;
 
 export const ArkTmuxCaptureInput = Schema.Struct({
   name: ArkTmuxName,
+  machineIp: Schema.optional(Schema.String),
   scroll: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 });
 export type ArkTmuxCaptureInput = typeof ArkTmuxCaptureInput.Type;
@@ -50,6 +57,7 @@ export type ArkTmuxCaptureResult = typeof ArkTmuxCaptureResult.Type;
 
 export const ArkTmuxSendTextInput = Schema.Struct({
   name: ArkTmuxName,
+  machineIp: Schema.optional(Schema.String),
   text: Schema.String.check(Schema.isMaxLength(65_536)),
   submit: Schema.optional(Schema.Boolean),
 });
@@ -57,6 +65,7 @@ export type ArkTmuxSendTextInput = typeof ArkTmuxSendTextInput.Type;
 
 export const ArkTmuxSendKeyInput = Schema.Struct({
   name: ArkTmuxName,
+  machineIp: Schema.optional(Schema.String),
   key: Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(32)),
 });
 export type ArkTmuxSendKeyInput = typeof ArkTmuxSendKeyInput.Type;

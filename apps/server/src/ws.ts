@@ -1469,25 +1469,33 @@ const makeWsRpcLayer = (
             "rpc.aggregate": "ark",
           }),
         [WS_METHODS.arkEnsureTmux]: (input) =>
-          observeRpcEffect(WS_METHODS.arkEnsureTmux, ark.ensureTmux(input.name), {
+          observeRpcEffect(WS_METHODS.arkEnsureTmux, ark.ensureTmux(input.name, input.machineIp), {
             "rpc.aggregate": "ark",
           }),
         [WS_METHODS.arkCaptureTmux]: (input) =>
-          observeRpcEffect(WS_METHODS.arkCaptureTmux, ark.captureTmux(input.name, input.scroll), {
-            "rpc.aggregate": "ark",
-          }),
+          observeRpcEffect(
+            WS_METHODS.arkCaptureTmux,
+            ark.captureTmux(input.name, input.scroll, input.machineIp),
+            {
+              "rpc.aggregate": "ark",
+            },
+          ),
         [WS_METHODS.arkSendTmuxText]: (input) =>
           observeRpcEffect(
             WS_METHODS.arkSendTmuxText,
-            ark.sendTmuxText(input.name, input.text, input.submit),
+            ark.sendTmuxText(input.name, input.text, input.submit, input.machineIp),
             { "rpc.aggregate": "ark" },
           ),
         [WS_METHODS.arkSendTmuxKey]: (input) =>
-          observeRpcEffect(WS_METHODS.arkSendTmuxKey, ark.sendTmuxKey(input.name, input.key), {
-            "rpc.aggregate": "ark",
-          }),
+          observeRpcEffect(
+            WS_METHODS.arkSendTmuxKey,
+            ark.sendTmuxKey(input.name, input.key, input.machineIp),
+            {
+              "rpc.aggregate": "ark",
+            },
+          ),
         [WS_METHODS.arkStopTmux]: (input) =>
-          observeRpcEffect(WS_METHODS.arkStopTmux, ark.stopTmux(input.name), {
+          observeRpcEffect(WS_METHODS.arkStopTmux, ark.stopTmux(input.name, input.machineIp), {
             "rpc.aggregate": "ark",
           }),
         [WS_METHODS.subscribeVcsStatus]: (input) =>

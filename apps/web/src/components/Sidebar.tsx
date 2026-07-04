@@ -42,6 +42,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  type ArkTmuxSession,
   type ContextMenuItem,
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
@@ -111,6 +112,7 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../state/desktopUpdate";
+import { arkEnvironment } from "../state/ark";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import { projectEnvironment } from "../state/projects";
@@ -118,6 +120,7 @@ import { useEnvironmentQuery } from "../state/query";
 import { threadEnvironment, useEnvironmentThread } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useEnvironment, useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
+import { ARK_OPEN_SESSION_EVENT } from "./ArkHome";
 import {
   buildThreadRouteParams,
   resolveThreadRouteRef,
@@ -2869,6 +2872,117 @@ interface SidebarProjectsContentProps {
   projectsLength: number;
 }
 
+function arkMachineLabel(session: ArkTmuxSession): string {
+  return session.machineName ?? (session.machineIp ? session.machineIp : "This device");
+}
+
+function arkSessionKey(session: ArkTmuxSession): string {
+  return `${session.machineIp ?? "local"}:${session.name}`;
+}
+
+function ArkSidebarSessions() {
+  const navigate = useNavigate();
+  const { environments } = useEnvironments();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const environmentId = primaryEnvironmentId ?? environments[0]?.environmentId ?? null;
+  const listTmuxSessions = useAtomCommand(arkEnvironment.listTmuxSessions, {
+    reportFailure: false,
+  });
+  const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, { reportFailure: false });
+  const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
+
+  const refresh = useCallback(async () => {
+    if (environmentId === null) return;
+    const result = await listTmuxSessions({ environmentId, input: {} });
+    if (result._tag === "Success") {
+      setSessions(
+        [...result.value.sessions].sort((a, b) => {
+          if (a.machineSelf !== b.machineSelf) return a.machineSelf ? -1 : 1;
+          const machineSort = arkMachineLabel(a).localeCompare(arkMachineLabel(b));
+          return machineSort === 0 ? a.name.localeCompare(b.name) : machineSort;
+        }),
+      );
+    }
+  }, [environmentId, listTmuxSessions]);
+
+  useEffect(() => {
+    void refresh();
+    const timers = [
+      window.setTimeout(() => void refresh(), 3000),
+      window.setTimeout(() => void refresh(), 9000),
+    ];
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [refresh]);
+
+  const openSession = useCallback(
+    async (session: ArkTmuxSession) => {
+      if (environmentId === null) return;
+      await ensureTmux({
+        environmentId,
+        input: { name: session.name, machineIp: session.machineIp },
+      });
+      await navigate({ to: "/" });
+      window.dispatchEvent(new CustomEvent(ARK_OPEN_SESSION_EVENT, { detail: session }));
+    },
+    [ensureTmux, environmentId, navigate],
+  );
+
+  return (
+    <SidebarGroup className="px-2 py-2">
+      <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+          Ark
+        </span>
+        <button
+          type="button"
+          aria-label="Refresh Ark sessions"
+          className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() => void refresh()}
+        >
+          <LoaderIcon className="size-3.5" />
+        </button>
+      </div>
+      <div className="space-y-1">
+        {sessions.length === 0 ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+            onClick={() =>
+              void openSession({
+                name: "ark-main",
+                windows: null,
+                attached: null,
+                created: null,
+                ark: true,
+              })
+            }
+          >
+            <TerminalIcon className="size-3.5 shrink-0" />
+            <span className="truncate">Open ark-main</span>
+          </button>
+        ) : (
+          sessions.map((session) => (
+            <button
+              key={arkSessionKey(session)}
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => void openSession(session)}
+            >
+              <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{session.name}</span>
+                <span className="block truncate text-[11px] text-muted-foreground/65">
+                  {arkMachineLabel(session)}
+                </span>
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+    </SidebarGroup>
+  );
+}
+
 const SidebarProjectsContent = memo(function SidebarProjectsContent(
   props: SidebarProjectsContentProps,
 ) {
@@ -2984,10 +3098,11 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       ) : null}
       <LocalSecondaryStatus />
+      <ArkSidebarSessions />
       <SidebarGroup className="px-2 py-2">
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            {projectsLength === 0 ? "Ark" : "Projects"}
+            Projects
           </span>
           <div className="flex items-center gap-1">
             <ProjectSortMenu
@@ -3090,12 +3205,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               />
             ))}
           </SidebarMenu>
-        )}
-
-        {projectsLength === 0 && (
-          <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
-            Open Ark sessions on the right
-          </div>
         )}
       </SidebarGroup>
     </SidebarContent>

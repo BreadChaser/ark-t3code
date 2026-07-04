@@ -11,6 +11,7 @@ import {
   buildSendTextCommand,
   isTmuxMissing,
   parseTmuxSessions,
+  shellSingle,
   stripAnsi,
   tmuxTarget,
 } from "./ManagedTmux.ts";
@@ -27,18 +28,27 @@ export class ArkService extends Context.Service<
       { readonly sessions: readonly ArkTmuxSession[] },
       ArkOperationError
     >;
-    readonly ensureTmux: (name: string) => Effect.Effect<void, ArkOperationError>;
+    readonly ensureTmux: (
+      name: string,
+      machineIp?: string,
+    ) => Effect.Effect<void, ArkOperationError>;
     readonly captureTmux: (
       name: string,
       scroll?: number,
+      machineIp?: string,
     ) => Effect.Effect<{ readonly text: string }, ArkOperationError>;
     readonly sendTmuxText: (
       name: string,
       text: string,
       submit?: boolean,
+      machineIp?: string,
     ) => Effect.Effect<void, ArkOperationError>;
-    readonly sendTmuxKey: (name: string, key: string) => Effect.Effect<void, ArkOperationError>;
-    readonly stopTmux: (name: string) => Effect.Effect<void, ArkOperationError>;
+    readonly sendTmuxKey: (
+      name: string,
+      key: string,
+      machineIp?: string,
+    ) => Effect.Effect<void, ArkOperationError>;
+    readonly stopTmux: (name: string, machineIp?: string) => Effect.Effect<void, ArkOperationError>;
   }
 >()("t3/ark/ArkService") {}
 
@@ -67,6 +77,29 @@ function runShell(
     .pipe(Effect.mapError((cause) => operationError(operation, cause.message)));
 }
 
+const TMUX_LIST_COMMAND =
+  "tmux list-sessions -F '#S\t#{session_windows}\t#{session_attached}\t#{session_created}'";
+
+function decorateSessions(
+  sessions: readonly ArkTmuxSession[],
+  machine: Pick<ArkMachine, "id" | "hostname" | "tailscaleIp" | "online" | "isSelf">,
+): readonly ArkTmuxSession[] {
+  return sessions.map((session) => ({
+    ...session,
+    machineId: machine.id,
+    machineName: machine.hostname,
+    machineIp: machine.isSelf ? undefined : machine.tailscaleIp,
+    machineOnline: machine.online,
+    machineSelf: machine.isSelf,
+  }));
+}
+
+function remoteCommand(machineIp: string | undefined, command: string): string {
+  return machineIp
+    ? `timeout 6 tailscale ssh ${shellSingle(machineIp)} ${shellSingle(command)}`
+    : command;
+}
+
 function ensureExitOk(
   operation: string,
   result: ProcessRunner.ProcessRunOutput,
@@ -79,6 +112,22 @@ function ensureExitOk(
 
 export const make = Effect.fn("ArkService.make")(function* () {
   const processRunner = yield* ProcessRunner.ProcessRunner;
+
+  const readTmuxSessions = (machineIp?: string) =>
+    runShell(
+      processRunner,
+      "ark.listTmuxSessions",
+      remoteCommand(machineIp, TMUX_LIST_COMMAND),
+    ).pipe(
+      Effect.flatMap((result) => {
+        if (result.code === 0) {
+          return Effect.succeed(parseTmuxSessions(result.stdout));
+        }
+        return isTmuxMissing(commandText(result))
+          ? Effect.succeed([])
+          : Effect.fail(operationError("ark.listTmuxSessions", commandText(result)));
+      }),
+    );
 
   const listMachines: ArkService["Service"]["listMachines"] = () =>
     runShell(processRunner, "ark.listMachines", "tailscale status --json").pipe(
@@ -93,28 +142,53 @@ export const make = Effect.fn("ArkService.make")(function* () {
     );
 
   const listTmuxSessions: ArkService["Service"]["listTmuxSessions"] = () =>
+    Effect.gen(function* () {
+      const localSessions = yield* readTmuxSessions();
+      const { machines } = yield* listMachines().pipe(
+        Effect.catch(() => Effect.succeed({ machines: [] as readonly ArkMachine[] })),
+      );
+      const self = machines.find((machine) => machine.isSelf);
+      const localMachine =
+        self ??
+        ({
+          id: "local",
+          hostname: "This device",
+          tailscaleIp: "",
+          online: true,
+          isSelf: true,
+        } satisfies Pick<ArkMachine, "id" | "hostname" | "tailscaleIp" | "online" | "isSelf">);
+
+      const remoteMachines = machines.filter(
+        (machine) => machine.online && !machine.isSelf && machine.os === "linux",
+      );
+      const remoteSessions = yield* Effect.forEach(
+        remoteMachines,
+        (machine) =>
+          readTmuxSessions(machine.tailscaleIp).pipe(
+            Effect.map((sessions) => decorateSessions(sessions, machine)),
+            Effect.catch(() => Effect.succeed([] as readonly ArkTmuxSession[])),
+          ),
+        { concurrency: 4 },
+      );
+
+      return {
+        sessions: [...decorateSessions(localSessions, localMachine), ...remoteSessions.flat()],
+      };
+    });
+
+  const ensureTmux: ArkService["Service"]["ensureTmux"] = (name, machineIp) =>
     runShell(
       processRunner,
-      "ark.listTmuxSessions",
-      "tmux list-sessions -F '#S\t#{session_windows}\t#{session_attached}\t#{session_created}'",
+      "ark.ensureTmux",
+      remoteCommand(machineIp, buildEnsureTmuxScript(name)),
+    ).pipe(Effect.flatMap((result) => ensureExitOk("ark.ensureTmux", result)));
+
+  const captureTmux: ArkService["Service"]["captureTmux"] = (name, scroll, machineIp) =>
+    runShell(
+      processRunner,
+      "ark.captureTmux",
+      remoteCommand(machineIp, buildCapturePaneCommand(name, scroll ?? 300)),
     ).pipe(
-      Effect.flatMap((result) => {
-        if (result.code === 0) {
-          return Effect.succeed({ sessions: parseTmuxSessions(result.stdout) });
-        }
-        return isTmuxMissing(commandText(result))
-          ? Effect.succeed({ sessions: [] })
-          : Effect.fail(operationError("ark.listTmuxSessions", commandText(result)));
-      }),
-    );
-
-  const ensureTmux: ArkService["Service"]["ensureTmux"] = (name) =>
-    runShell(processRunner, "ark.ensureTmux", buildEnsureTmuxScript(name)).pipe(
-      Effect.flatMap((result) => ensureExitOk("ark.ensureTmux", result)),
-    );
-
-  const captureTmux: ArkService["Service"]["captureTmux"] = (name, scroll) =>
-    runShell(processRunner, "ark.captureTmux", buildCapturePaneCommand(name, scroll ?? 300)).pipe(
       Effect.flatMap((result) =>
         result.code === 0
           ? Effect.succeed({ text: stripAnsi(result.stdout).trimEnd() })
@@ -122,25 +196,29 @@ export const make = Effect.fn("ArkService.make")(function* () {
       ),
     );
 
-  const sendTmuxText: ArkService["Service"]["sendTmuxText"] = (name, text, submit) =>
+  const sendTmuxText: ArkService["Service"]["sendTmuxText"] = (name, text, submit, machineIp) =>
     runShell(
       processRunner,
       "ark.sendTmuxText",
-      buildSendTextCommand(name, text, submit ?? true),
+      remoteCommand(machineIp, buildSendTextCommand(name, text, submit ?? true)),
     ).pipe(Effect.flatMap((result) => ensureExitOk("ark.sendTmuxText", result)));
 
-  const sendTmuxKey: ArkService["Service"]["sendTmuxKey"] = (name, key) => {
+  const sendTmuxKey: ArkService["Service"]["sendTmuxKey"] = (name, key, machineIp) => {
     const command = buildSendKeyCommand(name, key);
     if (command === null) {
       return Effect.fail(operationError("ark.sendTmuxKey", `Unsupported tmux key: ${key}`));
     }
-    return runShell(processRunner, "ark.sendTmuxKey", command).pipe(
+    return runShell(processRunner, "ark.sendTmuxKey", remoteCommand(machineIp, command)).pipe(
       Effect.flatMap((result) => ensureExitOk("ark.sendTmuxKey", result)),
     );
   };
 
-  const stopTmux: ArkService["Service"]["stopTmux"] = (name) =>
-    runShell(processRunner, "ark.stopTmux", `tmux kill-session -t ${tmuxTarget(name)}`).pipe(
+  const stopTmux: ArkService["Service"]["stopTmux"] = (name, machineIp) =>
+    runShell(
+      processRunner,
+      "ark.stopTmux",
+      remoteCommand(machineIp, `tmux kill-session -t ${tmuxTarget(name)}`),
+    ).pipe(
       Effect.flatMap((result) =>
         result.code === 0 || isTmuxMissing(commandText(result))
           ? Effect.void
