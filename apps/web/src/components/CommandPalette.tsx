@@ -11,6 +11,7 @@ import {
   type DesktopWslState,
   type EnvironmentId,
   type FilesystemBrowseResult,
+  type ArkTmuxSession,
   type ProjectId,
   ProviderInstanceId,
   type SourceControlDiscoveryResult,
@@ -32,6 +33,7 @@ import {
   NetworkIcon,
   SettingsIcon,
   SquarePenIcon,
+  TerminalIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -54,6 +56,7 @@ import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useClientSettings } from "../hooks/useSettings";
 import { readLocalApi } from "../localApi";
 import { desktopLocalBackendId } from "../connection/desktopLocal";
+import { arkEnvironment } from "../state/ark";
 import { filesystemEnvironment } from "../state/filesystem";
 import { projectEnvironment } from "../state/projects";
 import { useEnvironmentQuery } from "../state/query";
@@ -159,6 +162,12 @@ interface AddProjectEnvironmentOption {
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly isPrimary: boolean;
+}
+
+function tmuxSessionDescription(session: ArkTmuxSession): string {
+  const windows = session.windows === null ? "?" : String(session.windows);
+  const attached = session.attached === null ? "?" : String(session.attached);
+  return `${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
 }
 
 type AddProjectRemoteProviderKind = Extract<
@@ -471,6 +480,12 @@ function OpenCommandPaletteDialog(props: {
     reportFailure: false,
   });
   const connectTrustedEnvironment = useAtomCommand(connectTrustedEnvironmentAtom, {
+    reportFailure: false,
+  });
+  const listTmuxSessions = useAtomCommand(arkEnvironment.listTmuxSessions, {
+    reportFailure: false,
+  });
+  const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, {
     reportFailure: false,
   });
   const { environments } = useEnvironments();
@@ -807,6 +822,88 @@ function OpenCommandPaletteDialog(props: {
     });
   }, []);
 
+  const ensureTmuxSession = useCallback(
+    async (environmentId: EnvironmentId, name: string): Promise<void> => {
+      const result = await ensureTmux({ environmentId, input: { name } });
+      if (result._tag === "Failure") {
+        if (!isAtomCommandInterrupted(result)) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Could not open tmux session",
+              description: errorMessage(squashAtomCommandFailure(result)),
+            }),
+          );
+        }
+        return;
+      }
+
+      toastManager.add({
+        type: "success",
+        title: "Tmux session ready",
+        description: name,
+      });
+      setOpen(false);
+    },
+    [ensureTmux, setOpen],
+  );
+
+  const startTmuxSessionSelection = useCallback(
+    async (environmentId: EnvironmentId): Promise<void> => {
+      const result = await listTmuxSessions({ environmentId, input: {} });
+      if (result._tag === "Failure") {
+        if (!isAtomCommandInterrupted(result)) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Could not list tmux sessions",
+              description: errorMessage(squashAtomCommandFailure(result)),
+            }),
+          );
+        }
+        return;
+      }
+
+      const sessions = result.value.sessions;
+      const items: CommandPaletteActionItem[] = [
+        {
+          kind: "action",
+          value: `action:add-project:${environmentId}:tmux:create-ark-main`,
+          searchTerms: ["tmux", "ark", "session", "create", "terminal"],
+          title: "Create or open ark-main",
+          description: "Managed tmux session",
+          icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
+          run: async () => {
+            await ensureTmuxSession(environmentId, "ark-main");
+          },
+        },
+        ...sessions.map(
+          (session): CommandPaletteActionItem => ({
+            kind: "action",
+            value: `action:add-project:${environmentId}:tmux:${session.name}`,
+            searchTerms: ["tmux", "session", "terminal", session.name, session.ark ? "ark" : ""],
+            title: session.name,
+            description: tmuxSessionDescription(session),
+            icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
+            run: async () => {
+              await ensureTmuxSession(environmentId, session.name);
+            },
+          }),
+        ),
+      ];
+
+      setAddProjectEnvironmentId(environmentId);
+      setAddProjectCloneFlow(null);
+      setIsTrustedBackendFlow(false);
+      pushPaletteView({
+        addonIcon: <TerminalIcon className={ADDON_ICON_CLASS} />,
+        groups: [{ value: `tmux:${environmentId}`, label: "Tmux sessions", items }],
+        initialQuery: "",
+      });
+    },
+    [ensureTmuxSession, listTmuxSessions],
+  );
+
   const buildAddProjectSourceGroups = useCallback(
     (
       environmentId: EnvironmentId,
@@ -835,6 +932,18 @@ function OpenCommandPaletteDialog(props: {
           keepOpen: true,
           run: async () => {
             startTrustedBackendFlow();
+          },
+        },
+        {
+          kind: "action",
+          value: `action:add-project:${environmentId}:tmux-sessions`,
+          searchTerms: ["tmux", "session", "terminal", "attach", "ark"],
+          title: "Tmux sessions",
+          description: "List or create sessions on this backend",
+          icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
+          keepOpen: true,
+          run: async () => {
+            await startTmuxSessionSelection(environmentId);
           },
         },
       ];
@@ -915,6 +1024,7 @@ function OpenCommandPaletteDialog(props: {
       startAddProjectBrowse,
       startAddProjectClone,
       startTrustedBackendFlow,
+      startTmuxSessionSelection,
     ],
   );
 
@@ -972,13 +1082,7 @@ function OpenCommandPaletteDialog(props: {
 
     const environmentId = defaultAddProjectEnvironmentId;
     if (!environmentId) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Unable to browse projects",
-          description: "No environment is available.",
-        }),
-      );
+      startTrustedBackendFlow();
       return;
     }
 
@@ -988,6 +1092,7 @@ function OpenCommandPaletteDialog(props: {
     addProjectEnvironmentOptions.length,
     defaultAddProjectEnvironmentId,
     startAddProjectSourceSelection,
+    startTrustedBackendFlow,
   ]);
 
   useLayoutEffect(() => {
