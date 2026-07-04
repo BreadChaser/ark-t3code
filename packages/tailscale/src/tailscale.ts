@@ -91,21 +91,35 @@ export class TailscaleStatusParseError extends Schema.TaggedErrorClass<Tailscale
   }
 }
 
-const TailscaleStatusSelf = Schema.Struct({
+const TailscaleStatusPeerInfo = Schema.Struct({
   DNSName: Schema.optional(Schema.Unknown),
+  HostName: Schema.optional(Schema.Unknown),
+  Online: Schema.optional(Schema.Unknown),
+  OS: Schema.optional(Schema.Unknown),
   TailscaleIPs: Schema.optional(Schema.Unknown),
 });
 
 const TailscaleStatusJson = Schema.Struct({
-  Self: Schema.optional(TailscaleStatusSelf),
+  Self: Schema.optional(TailscaleStatusPeerInfo),
+  Peer: Schema.optional(Schema.Record(Schema.String, TailscaleStatusPeerInfo)),
 });
 
-export type TailscaleStatusSelf = typeof TailscaleStatusSelf.Type;
+export type TailscaleStatusPeerInfo = typeof TailscaleStatusPeerInfo.Type;
 export type TailscaleStatusJson = typeof TailscaleStatusJson.Type;
 
 export interface TailscaleStatus {
   readonly magicDnsName: string | null;
   readonly tailnetIpv4Addresses: readonly string[];
+}
+
+export interface TailscalePeer {
+  readonly id: string;
+  readonly hostname: string;
+  readonly dnsName: string;
+  readonly tailscaleIp: string;
+  readonly online: boolean;
+  readonly os: string;
+  readonly isSelf: boolean;
 }
 
 const collectStdout = <E>(stream: Stream.Stream<Uint8Array, E>): Effect.Effect<string, E> =>
@@ -129,6 +143,34 @@ function normalizeMagicDnsName(status: TailscaleStatusJson): string | null {
 
   const normalized = dnsName.trim().replace(/\.$/u, "");
   return normalized.length > 0 ? normalized : null;
+}
+
+function firstTailnetIpv4Address(peer: TailscaleStatusPeerInfo | undefined): string | null {
+  const rawIps = peer?.TailscaleIPs;
+  if (!Array.isArray(rawIps)) {
+    return null;
+  }
+  for (const address of rawIps) {
+    if (typeof address === "string" && isTailscaleIpv4Address(address)) {
+      return address;
+    }
+  }
+  return null;
+}
+
+function normalizePeerName(rawPeer: TailscaleStatusPeerInfo | undefined): {
+  readonly dnsName: string;
+  readonly hostname: string;
+  readonly id: string;
+} {
+  const dnsName =
+    typeof rawPeer?.DNSName === "string" ? rawPeer.DNSName.trim().replace(/\.$/u, "") : "";
+  const hostname =
+    typeof rawPeer?.HostName === "string" && rawPeer.HostName.trim().length > 0
+      ? rawPeer.HostName.trim()
+      : dnsName.split(".")[0] || "unknown";
+  const id = (dnsName || hostname || "unknown").split(".")[0]!.toLowerCase().replace(/\s+/gu, "-");
+  return { dnsName, hostname, id };
 }
 
 export const parseTailscaleMagicDnsName = (
@@ -177,6 +219,52 @@ export const parseTailscaleStatus = (
         magicDnsName: normalizeMagicDnsName(parsed),
         tailnetIpv4Addresses,
       };
+    }),
+  );
+
+export const parseTailscalePeers = (
+  rawStatusJson: string,
+): Effect.Effect<readonly TailscalePeer[], TailscaleStatusParseError> =>
+  decodeTailscaleStatusJson(rawStatusJson).pipe(
+    Effect.mapError((cause) => new TailscaleStatusParseError({ cause })),
+    Effect.map((parsed) => {
+      const peers: TailscalePeer[] = [];
+      const selfIp = firstTailnetIpv4Address(parsed.Self);
+      if (selfIp) {
+        const name = normalizePeerName(parsed.Self);
+        peers.push({
+          id: name.id,
+          hostname: name.hostname,
+          dnsName: name.dnsName,
+          tailscaleIp: selfIp,
+          online: true,
+          os: typeof parsed.Self?.OS === "string" ? parsed.Self.OS : "unknown",
+          isSelf: true,
+        });
+      }
+
+      for (const rawPeer of Object.values(parsed.Peer ?? {})) {
+        const tailscaleIp = firstTailnetIpv4Address(rawPeer);
+        if (!tailscaleIp) {
+          continue;
+        }
+        const name = normalizePeerName(rawPeer);
+        peers.push({
+          id: name.id,
+          hostname: name.hostname,
+          dnsName: name.dnsName,
+          tailscaleIp,
+          online: rawPeer.Online === true,
+          os: typeof rawPeer.OS === "string" ? rawPeer.OS : "unknown",
+          isSelf: false,
+        });
+      }
+
+      return peers.sort((a, b) => {
+        const rankA = `${a.isSelf ? "0" : "1"}:${a.online ? "0" : "1"}:${a.hostname.toLowerCase()}`;
+        const rankB = `${b.isSelf ? "0" : "1"}:${b.online ? "0" : "1"}:${b.hostname.toLowerCase()}`;
+        return rankA.localeCompare(rankB);
+      });
     }),
   );
 

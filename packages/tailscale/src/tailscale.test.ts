@@ -15,6 +15,7 @@ import {
   ensureTailscaleServe,
   isTailscaleIpv4Address,
   parseTailscaleMagicDnsName,
+  parseTailscalePeers,
   parseTailscaleStatus,
   readTailscaleStatus,
   TAILSCALE_STATUS_TIMEOUT,
@@ -27,6 +28,37 @@ import {
 const encoder = new TextEncoder();
 const tailscaleStatusJson = `{"Self":{"DNSName":"desktop.tail.ts.net.","TailscaleIPs":["100.100.100.100","fd7a:115c:a1e0::1","192.168.1.20"]}}`;
 const tailscaleStatusWithSingleIpJson = `{"Self":{"DNSName":"desktop.tail.ts.net.","TailscaleIPs":["100.90.1.2"]}}`;
+const tailscalePeersJson = JSON.stringify({
+  Self: {
+    DNSName: "hp.tail.ts.net.",
+    HostName: "hp",
+    TailscaleIPs: ["100.94.206.66"],
+    OS: "linux",
+  },
+  Peer: {
+    one: {
+      DNSName: "gaming.tail.ts.net.",
+      HostName: "gaming",
+      TailscaleIPs: ["100.114.148.108"],
+      Online: true,
+      OS: "linux",
+    },
+    two: {
+      DNSName: "phone.tail.ts.net.",
+      HostName: "phone",
+      TailscaleIPs: ["fd7a:115c:a1e0::2"],
+      Online: true,
+      OS: "ios",
+    },
+    three: {
+      DNSName: "tablet.tail.ts.net.",
+      HostName: "tablet",
+      TailscaleIPs: ["100.80.1.20"],
+      Online: false,
+      OS: "android",
+    },
+  },
+});
 
 function mockHandle(result: { stdout?: string; stderr?: string; code?: number }) {
   return ChildProcessSpawner.makeHandle({
@@ -103,6 +135,41 @@ describe("tailscale", () => {
         magicDnsName: "desktop.tail.ts.net",
         tailnetIpv4Addresses: ["100.100.100.100"],
       });
+    }),
+  );
+
+  it.effect("parses Ark-style peer inventory from tailscale status", () =>
+    Effect.gen(function* () {
+      const peers = yield* parseTailscalePeers(tailscalePeersJson);
+      assert.deepEqual(peers, [
+        {
+          id: "hp",
+          hostname: "hp",
+          dnsName: "hp.tail.ts.net",
+          tailscaleIp: "100.94.206.66",
+          online: true,
+          os: "linux",
+          isSelf: true,
+        },
+        {
+          id: "gaming",
+          hostname: "gaming",
+          dnsName: "gaming.tail.ts.net",
+          tailscaleIp: "100.114.148.108",
+          online: true,
+          os: "linux",
+          isSelf: false,
+        },
+        {
+          id: "tablet",
+          hostname: "tablet",
+          dnsName: "tablet.tail.ts.net",
+          tailscaleIp: "100.80.1.20",
+          online: false,
+          os: "android",
+          isSelf: false,
+        },
+      ]);
     }),
   );
 
