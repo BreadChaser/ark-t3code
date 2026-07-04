@@ -29,6 +29,7 @@ import {
   FolderPlusIcon,
   LinkIcon,
   MessageSquareIcon,
+  NetworkIcon,
   SettingsIcon,
   SquarePenIcon,
 } from "lucide-react";
@@ -786,6 +787,11 @@ function OpenCommandPaletteDialog(props: {
     void navigate({ to: "/settings/source-control" });
   }, [navigate, setOpen]);
 
+  const openConnectionsSettings = useCallback(() => {
+    setOpen(false);
+    void navigate({ to: "/settings/connections" });
+  }, [navigate, setOpen]);
+
   const buildAddProjectSourceGroups = useCallback(
     (
       environmentId: EnvironmentId,
@@ -802,6 +808,17 @@ function OpenCommandPaletteDialog(props: {
           keepOpen: true,
           run: async () => {
             startAddProjectBrowse(environmentId);
+          },
+        },
+        {
+          kind: "action",
+          value: `action:add-project:${environmentId}:tailscale-tmux`,
+          searchTerms: ["tailscale", "tmux", "backend", "environment", "remote", "gaming pc"],
+          title: "Tailscale / tmux backend",
+          description: "Connect a trusted backend URL first",
+          icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
+          run: async () => {
+            openConnectionsSettings();
           },
         },
       ];
@@ -877,7 +894,12 @@ function OpenCommandPaletteDialog(props: {
 
       return [{ value: `sources:${environmentId}`, label: "Sources", items: sourceItems }];
     },
-    [openSourceControlSettings, startAddProjectBrowse, startAddProjectClone],
+    [
+      openConnectionsSettings,
+      openSourceControlSettings,
+      startAddProjectBrowse,
+      startAddProjectClone,
+    ],
   );
 
   const startAddProjectSourceSelection = useCallback(
