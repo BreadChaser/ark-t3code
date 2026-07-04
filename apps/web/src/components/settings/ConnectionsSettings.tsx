@@ -129,6 +129,7 @@ import { environmentCatalog } from "~/connection/catalog";
 import {
   connectPairing as connectPairingAtom,
   connectSshEnvironment as connectSshEnvironmentAtom,
+  connectTrustedEnvironment as connectTrustedEnvironmentAtom,
 } from "~/connection/onboarding";
 import { useEnvironmentQuery } from "~/state/query";
 import {
@@ -2014,6 +2015,9 @@ export function ConnectionsSettings() {
   const connectSshEnvironment = useAtomCommand(connectSshEnvironmentAtom, {
     reportFailure: false,
   });
+  const connectTrustedEnvironment = useAtomCommand(connectTrustedEnvironmentAtom, {
+    reportFailure: false,
+  });
   const removeEnvironment = useAtomCommand(environmentCatalog.remove, { reportFailure: false });
   const retryEnvironment = useAtomCommand(environmentCatalog.retryNow, { reportFailure: false });
   const primaryEnvironmentId = primaryEnvironment?.environmentId ?? null;
@@ -2087,12 +2091,16 @@ export function ConnectionsSettings() {
   >(null);
   const [isRevokingOtherDesktopClients, setIsRevokingOtherDesktopClients] = useState(false);
   const [addBackendDialogOpen, setAddBackendDialogOpen] = useState(false);
-  const [savedBackendMode, setSavedBackendMode] = useState<"remote" | "ssh">("remote");
+  const [savedBackendMode, setSavedBackendMode] = useState<"remote" | "ssh" | "tailscale">(
+    "remote",
+  );
   const [savedBackendHost, setSavedBackendHost] = useState("");
   const [savedBackendPairingCode, setSavedBackendPairingCode] = useState("");
   const [savedBackendSshHost, setSavedBackendSshHost] = useState("");
   const [savedBackendSshUsername, setSavedBackendSshUsername] = useState("");
   const [savedBackendSshPort, setSavedBackendSshPort] = useState("");
+  const [savedBackendTrustedUrl, setSavedBackendTrustedUrl] = useState("");
+  const [savedBackendTrustedLabel, setSavedBackendTrustedLabel] = useState("");
   const [savedBackendError, setSavedBackendError] = useState<string | null>(null);
   const [isAddingSavedBackend, setIsAddingSavedBackend] = useState(false);
   const [removingSavedEnvironmentId, setRemovingSavedEnvironmentId] =
@@ -2406,6 +2414,40 @@ export function ConnectionsSettings() {
   }, []);
 
   const handleAddSavedBackend = useCallback(async () => {
+    if (savedBackendMode === "tailscale") {
+      setIsAddingSavedBackend(true);
+      setSavedBackendError(null);
+      const result = await connectTrustedEnvironment({
+        httpBaseUrl: savedBackendTrustedUrl,
+        label: savedBackendTrustedLabel,
+      });
+      if (result._tag === "Failure") {
+        if (!isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          const message = error instanceof Error ? error.message : "Failed to add environment.";
+          setSavedBackendError(message);
+        }
+        setIsAddingSavedBackend(false);
+        return;
+      }
+
+      setSavedBackendHost("");
+      setSavedBackendPairingCode("");
+      setSavedBackendSshHost("");
+      setSavedBackendSshUsername("");
+      setSavedBackendSshPort("");
+      setSavedBackendTrustedUrl("");
+      setSavedBackendTrustedLabel("");
+      setAddBackendDialogOpen(false);
+      toastManager.add({
+        type: "success",
+        title: "Environment connected",
+        description: "The trusted Tailscale/tmux backend is ready.",
+      });
+      setIsAddingSavedBackend(false);
+      return;
+    }
+
     if (savedBackendMode === "ssh") {
       setIsAddingSavedBackend(true);
       setSavedBackendError(null);
@@ -2436,6 +2478,8 @@ export function ConnectionsSettings() {
       setSavedBackendSshHost("");
       setSavedBackendSshUsername("");
       setSavedBackendSshPort("");
+      setSavedBackendTrustedUrl("");
+      setSavedBackendTrustedLabel("");
       setAddBackendDialogOpen(false);
       toastManager.add({
         type: "success",
@@ -2491,6 +2535,8 @@ export function ConnectionsSettings() {
     setSavedBackendSshHost("");
     setSavedBackendSshUsername("");
     setSavedBackendSshPort("");
+    setSavedBackendTrustedUrl("");
+    setSavedBackendTrustedLabel("");
     setAddBackendDialogOpen(false);
     toastManager.add({
       type: "success",
@@ -2501,12 +2547,15 @@ export function ConnectionsSettings() {
   }, [
     connectPairing,
     connectSshEnvironment,
+    connectTrustedEnvironment,
     savedBackendHost,
     savedBackendMode,
     savedBackendPairingCode,
     savedBackendSshHost,
     savedBackendSshPort,
     savedBackendSshUsername,
+    savedBackendTrustedLabel,
+    savedBackendTrustedUrl,
   ]);
 
   const handleConnectSavedBackend = useCallback(
@@ -2646,7 +2695,7 @@ export function ConnectionsSettings() {
   }, []);
 
   const renderConnectionModeCard = (input: {
-    readonly mode: "remote" | "ssh";
+    readonly mode: "remote" | "ssh" | "tailscale";
     readonly title: string;
     readonly description: string;
     readonly icon?: ReactNode;
@@ -2721,6 +2770,45 @@ export function ConnectionsSettings() {
   const renderRemoteModeBody = () => (
     <div className="space-y-4">
       {renderRemoteFields()}
+      {savedBackendError ? <p className="text-xs text-destructive">{savedBackendError}</p> : null}
+      <Button
+        variant="outline"
+        className="w-full"
+        disabled={isAddingSavedBackend}
+        onClick={() => void handleAddSavedBackend()}
+      >
+        <PlusIcon className="size-3.5" />
+        {isAddingSavedBackend ? "Adding…" : "Add environment"}
+      </Button>
+    </div>
+  );
+  const renderTrustedModeBody = () => (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-foreground">Backend URL</span>
+          <Input
+            value={savedBackendTrustedUrl}
+            onChange={(event) => setSavedBackendTrustedUrl(event.target.value)}
+            placeholder="http://100.114.148.108:4873"
+            disabled={isAddingSavedBackend}
+            spellCheck={false}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-foreground">Label</span>
+          <Input
+            value={savedBackendTrustedLabel}
+            onChange={(event) => setSavedBackendTrustedLabel(event.target.value)}
+            placeholder="Gaming PC"
+            disabled={isAddingSavedBackend}
+            spellCheck={false}
+          />
+        </label>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        For trusted Tailscale backends running without pairing auth, usually inside tmux.
+      </p>
       {savedBackendError ? <p className="text-xs text-destructive">{savedBackendError}</p> : null}
       <Button
         variant="outline"
@@ -3645,12 +3733,18 @@ export function ConnectionsSettings() {
               </DialogHeader>
               <DialogPanel>
                 <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
                     {renderConnectionModeCard({
                       mode: "remote",
                       title: "Remote link",
                       description: "Enter a backend host and pairing code.",
                       icon: <ChevronsLeftRightEllipsisIcon aria-hidden className="size-4" />,
+                    })}
+                    {renderConnectionModeCard({
+                      mode: "tailscale",
+                      title: "Tailscale / tmux",
+                      description: "Connect to a trusted backend URL without pairing.",
+                      icon: <TerminalIcon aria-hidden className="size-4" />,
                     })}
                     {desktopBridge
                       ? renderConnectionModeCard({
@@ -3662,7 +3756,11 @@ export function ConnectionsSettings() {
                       : null}
                   </div>
                   <AnimatedHeight>
-                    {savedBackendMode === "ssh" ? renderSshFields() : renderRemoteModeBody()}
+                    {savedBackendMode === "ssh"
+                      ? renderSshFields()
+                      : savedBackendMode === "tailscale"
+                        ? renderTrustedModeBody()
+                        : renderRemoteModeBody()}
                   </AnimatedHeight>
                 </div>
               </DialogPanel>

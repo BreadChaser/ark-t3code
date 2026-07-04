@@ -12,6 +12,7 @@ import {
   prepareBearerConnectionUpdate,
   preparePairingRegistration,
   prepareSshRegistration,
+  prepareTrustedRegistration,
 } from "./onboarding.ts";
 
 const CLIENT_PRESENTATION_LAYER = Layer.succeed(
@@ -137,6 +138,38 @@ describe("connection onboarding", () => {
 
       expect(calls.map((call) => call.url)).toEqual([
         "https://remote.example.test/.well-known/t3/environment",
+      ]);
+    }),
+  );
+
+  it.effect("prepares a trusted bearer registration without exchanging a pairing token", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+      const registration = yield* prepareTrustedRegistration({
+        httpBaseUrl: "http://100.114.148.108:4873",
+        label: "Gaming PC",
+      }).pipe(Effect.provide(pairingHttpLayer(calls)));
+
+      expect(registration).toMatchObject({
+        _tag: "BearerConnectionRegistration",
+        target: {
+          environmentId: "environment-paired",
+          label: "Gaming PC",
+          connectionId: "bearer:environment-paired",
+        },
+        profile: {
+          environmentId: "environment-paired",
+          label: "Gaming PC",
+          connectionId: "bearer:environment-paired",
+          httpBaseUrl: "http://100.114.148.108:4873/",
+          wsBaseUrl: "ws://100.114.148.108:4873/",
+        },
+        credential: {
+          token: "unsafe-no-auth",
+        },
+      });
+      expect(calls.map((call) => call.url)).toEqual([
+        "http://100.114.148.108:4873/.well-known/t3/environment",
       ]);
     }),
   );

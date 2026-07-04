@@ -43,6 +43,11 @@ export interface SshConnectionInput {
   readonly label?: string;
 }
 
+export interface TrustedConnectionInput {
+  readonly httpBaseUrl: string;
+  readonly label?: string;
+}
+
 export interface BearerConnectionUpdateInput {
   readonly environmentId: EnvironmentId;
   readonly label: string;
@@ -60,6 +65,12 @@ export class ConnectionOnboarding extends Context.Service<
     >;
     readonly registerSsh: (
       input: SshConnectionInput,
+    ) => Effect.Effect<
+      EnvironmentId,
+      ConnectionAttemptError | Persistence.ConnectionPersistenceError
+    >;
+    readonly registerTrusted: (
+      input: TrustedConnectionInput,
     ) => Effect.Effect<
       EnvironmentId,
       ConnectionAttemptError | Persistence.ConnectionPersistenceError
@@ -122,6 +133,51 @@ export const registerPairingConnection = Effect.fn(
   "clientRuntime.connection.onboarding.registerPairingConnection",
 )(function* (input: PairingConnectionInput) {
   const registration = yield* preparePairingRegistration(input);
+  const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+  yield* registry.register(registration);
+  return registration.target.environmentId;
+});
+
+export const prepareTrustedRegistration = Effect.fn(
+  "clientRuntime.connection.onboarding.prepareTrustedRegistration",
+)(function* (input: TrustedConnectionInput) {
+  const httpBaseUrl = yield* Effect.try({
+    try: () => normalizeHttpBaseUrl(input.httpBaseUrl),
+    catch: (cause) =>
+      new ConnectionBlockedError({
+        reason: "configuration",
+        detail: cause instanceof Error ? cause.message : "The environment URL is invalid.",
+      }),
+  });
+  const descriptor = yield* fetchRemoteEnvironmentDescriptor({ httpBaseUrl }).pipe(
+    Effect.mapError(mapRemoteEnvironmentError),
+  );
+  const connectionId = `bearer:${descriptor.environmentId}`;
+  const label = input.label?.trim() || descriptor.label;
+
+  return new BearerConnectionRegistration({
+    target: new BearerConnectionTarget({
+      environmentId: descriptor.environmentId,
+      label,
+      connectionId,
+    }),
+    profile: new BearerConnectionProfile({
+      connectionId,
+      environmentId: descriptor.environmentId,
+      label,
+      httpBaseUrl,
+      wsBaseUrl: deriveWsBaseUrl(httpBaseUrl),
+    }),
+    credential: new BearerConnectionCredential({
+      token: "unsafe-no-auth",
+    }),
+  });
+});
+
+export const registerTrustedConnection = Effect.fn(
+  "clientRuntime.connection.onboarding.registerTrustedConnection",
+)(function* (input: TrustedConnectionInput) {
+  const registration = yield* prepareTrustedRegistration(input);
   const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
   yield* registry.register(registration);
   return registration.target.environmentId;
@@ -260,6 +316,11 @@ export const make = Effect.gen(function* () {
       registerSshConnection(input).pipe(
         Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
         Effect.provideService(ClientCapabilities.SshEnvironmentGateway, ssh),
+      ),
+    registerTrusted: (input) =>
+      registerTrustedConnection(input).pipe(
+        Effect.provideService(EnvironmentRegistry.EnvironmentRegistry, registry),
+        Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     updateBearer: (input) =>
       updateBearerConnection(input).pipe(

@@ -14,11 +14,14 @@ export {
   ConnectionOnboarding,
   type PairingConnectionInput,
   type SshConnectionInput,
+  type TrustedConnectionInput,
   prepareBearerConnectionUpdate,
   preparePairingRegistration,
+  prepareTrustedRegistration,
   prepareSshRegistration,
   registerPairingConnection,
   registerSshConnection,
+  registerTrustedConnection,
   updateBearerConnection,
 } from "./onboarding.ts";
 export * from "./presentation.ts";

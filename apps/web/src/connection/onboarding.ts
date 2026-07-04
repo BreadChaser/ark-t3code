@@ -36,3 +36,15 @@ export const connectSshEnvironment = createRuntimeCommand(connectionAtomRuntime,
   execute: (input: { readonly target: DesktopSshEnvironmentTarget; readonly label?: string }) =>
     ConnectionOnboarding.pipe(Effect.flatMap((onboarding) => onboarding.registerSsh(input))),
 });
+
+export const connectTrustedEnvironment = createRuntimeCommand(connectionAtomRuntime, {
+  label: "web:connection:connect-trusted",
+  scheduler: onboardingScheduler,
+  concurrency: {
+    mode: "singleFlight",
+    key: (input: { readonly httpBaseUrl: string; readonly label?: string }) =>
+      JSON.stringify(input),
+  },
+  execute: (input: { readonly httpBaseUrl: string; readonly label?: string }) =>
+    ConnectionOnboarding.pipe(Effect.flatMap((onboarding) => onboarding.registerTrusted(input))),
+});
