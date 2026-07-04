@@ -93,6 +93,7 @@ import { useThreadDiscoveredPorts } from "../portDiscoveryState";
 import { openDiscoveredPort } from "./preview/openDiscoveredPort";
 import { useAtomCommand } from "../state/use-atom-command";
 import { previewEnvironment } from "../state/preview";
+import { cn } from "../lib/utils";
 import {
   legacyProjectCwdPreferenceKey,
   resolveProjectExpanded,
@@ -2880,6 +2881,29 @@ function arkSessionKey(session: ArkTmuxSession): string {
   return `${session.machineIp ?? "local"}:${session.name}`;
 }
 
+interface ArkMachineSessionGroup {
+  readonly key: string;
+  readonly label: string;
+  readonly sessions: readonly ArkTmuxSession[];
+}
+
+function groupArkSessionsByMachine(
+  sessions: readonly ArkTmuxSession[],
+): readonly ArkMachineSessionGroup[] {
+  const groups = new Map<string, { label: string; sessions: ArkTmuxSession[] }>();
+  for (const session of sessions) {
+    const key = session.machineIp ?? session.machineId ?? "local";
+    const group = groups.get(key) ?? { label: arkMachineLabel(session), sessions: [] };
+    group.sessions.push(session);
+    groups.set(key, group);
+  }
+  return [...groups.entries()].map(([key, group]) => ({
+    key,
+    label: group.label,
+    sessions: group.sessions,
+  }));
+}
+
 function ArkSidebarSessions() {
   const navigate = useNavigate();
   const { environments } = useEnvironments();
@@ -2890,6 +2914,10 @@ function ArkSidebarSessions() {
   });
   const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, { reportFailure: false });
   const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
+  const [isArkExpanded, setIsArkExpanded] = useState(true);
+  const [expandedMachines, setExpandedMachines] = useState<ReadonlySet<string>>(
+    () => new Set(["local"]),
+  );
 
   const refresh = useCallback(async () => {
     if (environmentId === null) return;
@@ -2926,13 +2954,46 @@ function ArkSidebarSessions() {
     },
     [ensureTmux, environmentId, navigate],
   );
+  const machineGroups = useMemo(() => groupArkSessionsByMachine(sessions), [sessions]);
+
+  useEffect(() => {
+    if (machineGroups.length === 0) return;
+    setExpandedMachines((current) => {
+      const next = new Set(current);
+      for (const group of machineGroups) {
+        if (group.sessions.some((session) => session.machineSelf)) next.add(group.key);
+      }
+      if (next.size === 0) next.add(machineGroups[0]!.key);
+      return next;
+    });
+  }, [machineGroups]);
+
+  const toggleMachine = useCallback((key: string) => {
+    setExpandedMachines((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   return (
-    <SidebarGroup className="px-2 py-2">
-      <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-          Ark
-        </span>
+    <div className="mb-2">
+      <div className="mb-1 flex items-center justify-between">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() => setIsArkExpanded((current) => !current)}
+        >
+          <ChevronRightIcon
+            className={cn("size-3.5 shrink-0 transition-transform", isArkExpanded && "rotate-90")}
+          />
+          <TerminalIcon className="size-3.5 shrink-0" />
+          <span className="truncate">Ark tmux</span>
+        </button>
         <button
           type="button"
           aria-label="Refresh Ark sessions"
@@ -2942,44 +3003,70 @@ function ArkSidebarSessions() {
           <LoaderIcon className="size-3.5" />
         </button>
       </div>
-      <div className="space-y-1">
-        {sessions.length === 0 ? (
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() =>
-              void openSession({
-                name: "ark-main",
-                windows: null,
-                attached: null,
-                created: null,
-                ark: true,
-              })
-            }
-          >
-            <TerminalIcon className="size-3.5 shrink-0" />
-            <span className="truncate">Open ark-main</span>
-          </button>
-        ) : (
-          sessions.map((session) => (
+      {isArkExpanded ? (
+        <div className="space-y-1 pl-2">
+          {sessions.length === 0 ? (
             <button
-              key={arkSessionKey(session)}
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
-              onClick={() => void openSession(session)}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() =>
+                void openSession({
+                  name: "ark-main",
+                  windows: null,
+                  attached: null,
+                  created: null,
+                  ark: true,
+                })
+              }
             >
-              <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{session.name}</span>
-                <span className="block truncate text-[11px] text-muted-foreground/65">
-                  {arkMachineLabel(session)}
-                </span>
-              </span>
+              <TerminalIcon className="size-3.5 shrink-0" />
+              <span className="truncate">Open ark-main</span>
             </button>
-          ))
-        )}
-      </div>
-    </SidebarGroup>
+          ) : (
+            machineGroups.map((group) => {
+              const isMachineExpanded = expandedMachines.has(group.key);
+              return (
+                <div key={group.key}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-[11px] font-medium text-muted-foreground/75 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={() => toggleMachine(group.key)}
+                  >
+                    <ChevronRightIcon
+                      className={cn(
+                        "size-3 shrink-0 transition-transform",
+                        isMachineExpanded && "rotate-90",
+                      )}
+                    />
+                    <span className="truncate">{group.label}</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground/55">
+                      {group.sessions.length}
+                    </span>
+                  </button>
+                  {isMachineExpanded ? (
+                    <div className="mt-0.5 space-y-0.5 pl-4">
+                      {group.sessions.map((session) => (
+                        <button
+                          key={arkSessionKey(session)}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
+                          onClick={() => void openSession(session)}
+                        >
+                          <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                          <span className="min-w-0 flex-1 truncate font-medium">
+                            {session.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -3098,7 +3185,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       ) : null}
       <LocalSecondaryStatus />
-      <ArkSidebarSessions />
       <SidebarGroup className="px-2 py-2">
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
@@ -3133,6 +3219,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             </Tooltip>
           </div>
         </div>
+        <ArkSidebarSessions />
 
         {isManualProjectSorting ? (
           <DndContext

@@ -21,6 +21,8 @@ import {
   ArkTmuxCaptureInput,
   ArkTmuxCaptureResult,
   ArkTmuxInput,
+  ArkTmuxSaveImageInput,
+  ArkTmuxSaveImageResult,
   ArkTmuxSendKeyInput,
   ArkTmuxSendTextInput,
 } from "./ark.ts";
@@ -178,6 +180,7 @@ export const WS_METHODS = {
   arkCaptureTmux: "ark.captureTmux",
   arkSendTmuxText: "ark.sendTmuxText",
   arkSendTmuxKey: "ark.sendTmuxKey",
+  arkSaveTmuxImage: "ark.saveTmuxImage",
   arkStopTmux: "ark.stopTmux",
 
   // VCS methods
@@ -444,6 +447,12 @@ export const WsArkSendTmuxTextRpc = Rpc.make(WS_METHODS.arkSendTmuxText, {
 
 export const WsArkSendTmuxKeyRpc = Rpc.make(WS_METHODS.arkSendTmuxKey, {
   payload: ArkTmuxSendKeyInput,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkSaveTmuxImageRpc = Rpc.make(WS_METHODS.arkSaveTmuxImage, {
+  payload: ArkTmuxSaveImageInput,
+  success: ArkTmuxSaveImageResult,
   error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
 });
 
@@ -769,6 +778,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsArkCaptureTmuxRpc,
   WsArkSendTmuxTextRpc,
   WsArkSendTmuxKeyRpc,
+  WsArkSaveTmuxImageRpc,
   WsArkStopTmuxRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,

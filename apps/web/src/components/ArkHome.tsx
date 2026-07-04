@@ -1,5 +1,13 @@
 import type { ArkTmuxSession, EnvironmentId } from "@t3tools/contracts";
-import { PlusIcon, RefreshCwIcon, SendIcon, SquareIcon, TerminalIcon } from "lucide-react";
+import {
+  ImageIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  SendIcon,
+  SquareIcon,
+  TerminalIcon,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
@@ -14,6 +22,12 @@ const DEFAULT_SESSION = "ark-main";
 export const ARK_OPEN_SESSION_EVENT = "ark:open-session";
 
 type ArkSessionTarget = Pick<ArkTmuxSession, "name" | "machineIp" | "machineName">;
+interface PastedImage {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+  readonly previewUrl: string;
+}
 
 function sessionKey(session: ArkSessionTarget): string {
   return `${session.machineIp ?? "local"}:${session.name}`;
@@ -27,6 +41,25 @@ function sessionLabel(session: ArkTmuxSession): string {
   const windows = session.windows === null ? "?" : String(session.windows);
   const attached = session.attached === null ? "?" : String(session.attached);
   return `${machineLabel(session)} - ${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
+}
+
+function readFileBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      const value = typeof reader.result === "string" ? reader.result : "";
+      const [, base64 = ""] = value.split(",", 2);
+      base64 ? resolve(base64) : reject(new Error("Could not read image."));
+    });
+    reader.addEventListener("error", () =>
+      reject(reader.error ?? new Error("Could not read image.")),
+    );
+    reader.readAsDataURL(file);
+  });
+}
+
+function randomLocalId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function ArkHome() {
@@ -43,19 +76,26 @@ export function ArkHome() {
   const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, { reportFailure: false });
   const captureTmux = useAtomCommand(arkEnvironment.captureTmux, { reportFailure: false });
   const sendTmuxText = useAtomCommand(arkEnvironment.sendTmuxText, { reportFailure: false });
+  const saveTmuxImage = useAtomCommand(arkEnvironment.saveTmuxImage, { reportFailure: false });
   const stopTmux = useAtomCommand(arkEnvironment.stopTmux, { reportFailure: false });
 
   const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<ArkSessionTarget | null>(null);
   const [terminalText, setTerminalText] = useState("");
   const [draft, setDraft] = useState("");
+  const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latestSelectedKey = useRef<string | null>(null);
+  const pastedImagesRef = useRef<readonly PastedImage[]>([]);
 
   useEffect(() => {
     latestSelectedKey.current = selectedSession === null ? null : sessionKey(selectedSession);
   }, [selectedSession]);
+
+  useEffect(() => {
+    pastedImagesRef.current = pastedImages;
+  }, [pastedImages]);
 
   const refreshSessions = useCallback(
     async (showError = false) => {
@@ -151,8 +191,59 @@ export function ArkHome() {
       return;
     }
 
+    for (const image of pastedImages) URL.revokeObjectURL(image.previewUrl);
+    setPastedImages([]);
     await captureSelected(selectedSession);
-  }, [captureSelected, draft, environmentId, selectedSession, sendTmuxText]);
+  }, [captureSelected, draft, environmentId, pastedImages, selectedSession, sendTmuxText]);
+
+  const pasteImages = useCallback(
+    async (files: File[]) => {
+      if (environmentId === null || selectedSession === null || files.length === 0) return;
+      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+      if (imageFiles.length === 0) return;
+
+      const savedImages: PastedImage[] = [];
+      for (const file of imageFiles) {
+        const dataBase64 = await readFileBase64(file);
+        const result = await saveTmuxImage({
+          environmentId,
+          input: {
+            machineIp: selectedSession.machineIp,
+            name: file.name || "pasted-image",
+            mimeType: file.type,
+            dataBase64,
+          },
+        });
+        if (result._tag === "Failure") {
+          setError(`Could not save ${file.name || "pasted image"}.`);
+          continue;
+        }
+        savedImages.push({
+          id: randomLocalId(),
+          name: file.name || "pasted image",
+          path: result.value.path,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+      if (savedImages.length === 0) return;
+
+      setPastedImages((current) => [...current, ...savedImages]);
+      setDraft((current) => {
+        const prefix = current.trim().length === 0 ? "" : `${current.trimEnd()}\n`;
+        return `${prefix}${savedImages.map((image) => `Image: ${image.path}`).join("\n")}`;
+      });
+      setError(null);
+    },
+    [environmentId, saveTmuxImage, selectedSession],
+  );
+
+  const removePastedImage = useCallback((imageId: string) => {
+    setPastedImages((current) => {
+      const image = current.find((item) => item.id === imageId);
+      if (image) URL.revokeObjectURL(image.previewUrl);
+      return current.filter((item) => item.id !== imageId);
+    });
+  }, []);
 
   const stopSelected = useCallback(async () => {
     if (environmentId === null || selectedSession === null) return;
@@ -198,6 +289,13 @@ export function ArkHome() {
     window.addEventListener(ARK_OPEN_SESSION_EVENT, handleOpenSession);
     return () => window.removeEventListener(ARK_OPEN_SESSION_EVENT, handleOpenSession);
   }, [openSession]);
+
+  useEffect(
+    () => () => {
+      for (const image of pastedImagesRef.current) URL.revokeObjectURL(image.previewUrl);
+    },
+    [],
+  );
 
   if (environmentId === null) {
     return (
@@ -255,9 +353,9 @@ export function ArkHome() {
                     sessionKey(selectedSession) === sessionKey(session) &&
                     "bg-accent text-accent-foreground",
                 )}
-                key={session.name}
+                key={sessionKey(session)}
                 type="button"
-                onClick={() => void openSession(session.name)}
+                onClick={() => void openSession(session)}
               >
                 <TerminalIcon className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1">
@@ -311,11 +409,46 @@ export function ArkHome() {
               void sendDraft();
             }}
           >
+            {pastedImages.length === 0 ? null : (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {pastedImages.map((image) => (
+                  <div
+                    key={image.id}
+                    className="flex max-w-[220px] items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs"
+                  >
+                    <img
+                      src={image.previewUrl}
+                      alt={image.name}
+                      className="size-8 rounded object-cover"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{image.name}</span>
+                      <span className="block truncate text-muted-foreground">{image.path}</span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${image.name}`}
+                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      onClick={() => removePastedImage(image.id)}
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <Textarea
                 className="flex-1"
                 disabled={selectedSession === null}
                 onChange={(event) => setDraft(event.target.value)}
+                onPaste={(event) => {
+                  const files = Array.from(event.clipboardData.files);
+                  if (files.some((file) => file.type.startsWith("image/"))) {
+                    event.preventDefault();
+                    void pasteImages(files);
+                  }
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -334,7 +467,7 @@ export function ArkHome() {
                 disabled={selectedSession === null || draft.trim().length === 0}
                 type="submit"
               >
-                <SendIcon />
+                {pastedImages.length > 0 ? <ImageIcon /> : <SendIcon />}
                 Send
               </Button>
             </div>

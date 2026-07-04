@@ -32,6 +32,10 @@ export function createArkEnvironmentAtoms<R, E>(
       label: "environment-data:ark:send-tmux-key",
       tag: WS_METHODS.arkSendTmuxKey,
     }),
+    saveTmuxImage: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:ark:save-tmux-image",
+      tag: WS_METHODS.arkSaveTmuxImage,
+    }),
     stopTmux: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ark:stop-tmux",
       tag: WS_METHODS.arkStopTmux,

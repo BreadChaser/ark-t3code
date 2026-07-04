@@ -48,6 +48,12 @@ export class ArkService extends Context.Service<
       key: string,
       machineIp?: string,
     ) => Effect.Effect<void, ArkOperationError>;
+    readonly saveTmuxImage: (input: {
+      readonly machineIp?: string;
+      readonly name: string;
+      readonly mimeType: string;
+      readonly dataBase64: string;
+    }) => Effect.Effect<{ readonly path: string }, ArkOperationError>;
     readonly stopTmux: (name: string, machineIp?: string) => Effect.Effect<void, ArkOperationError>;
   }
 >()("t3/ark/ArkService") {}
@@ -64,11 +70,13 @@ function runShell(
   processRunner: ProcessRunner.ProcessRunner["Service"],
   operation: string,
   command: string,
+  stdin?: string,
 ): Effect.Effect<ProcessRunner.ProcessRunOutput, ArkOperationError> {
   return processRunner
     .run({
       command: "sh",
       args: ["-lc", command],
+      stdin,
       timeout: "10 seconds",
       maxOutputBytes: 512_000,
       outputMode: "truncate",
@@ -79,6 +87,12 @@ function runShell(
 
 const TMUX_LIST_COMMAND =
   "tmux list-sessions -F '#S\t#{session_windows}\t#{session_attached}\t#{session_created}'";
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
 
 function decorateSessions(
   sessions: readonly ArkTmuxSession[],
@@ -108,6 +122,16 @@ function ensureExitOk(
   return Effect.fail(
     operationError(operation, commandText(result) || `Command exited with code ${result.code}.`),
   );
+}
+
+function safeUploadFileName(name: string, mimeType: string): string {
+  const extension = IMAGE_EXTENSIONS[mimeType] ?? "img";
+  const stem = name
+    .replace(/\.[^.]+$/u, "")
+    .replaceAll(/[^a-zA-Z0-9._-]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "")
+    .slice(0, 80);
+  return `${Date.now()}-${stem || "paste"}.${extension}`;
 }
 
 export const make = Effect.fn("ArkService.make")(function* () {
@@ -213,6 +237,33 @@ export const make = Effect.fn("ArkService.make")(function* () {
     );
   };
 
+  const saveTmuxImage: ArkService["Service"]["saveTmuxImage"] = (input) => {
+    if (!input.mimeType.startsWith("image/")) {
+      return Effect.fail(operationError("ark.saveTmuxImage", "Only image uploads are supported."));
+    }
+    const fileName = safeUploadFileName(input.name, input.mimeType);
+    const command = [
+      `dir="$HOME/.ark/uploads"`,
+      `file=${shellSingle(fileName)}`,
+      `mkdir -p "$dir"`,
+      `path="$dir/$file"`,
+      `base64 -d > "$path"`,
+      `printf %s "$path"`,
+    ].join(" && ");
+    return runShell(
+      processRunner,
+      "ark.saveTmuxImage",
+      remoteCommand(input.machineIp, command),
+      input.dataBase64,
+    ).pipe(
+      Effect.flatMap((result) =>
+        result.code === 0
+          ? Effect.succeed({ path: result.stdout.trim() })
+          : Effect.fail(operationError("ark.saveTmuxImage", commandText(result))),
+      ),
+    );
+  };
+
   const stopTmux: ArkService["Service"]["stopTmux"] = (name, machineIp) =>
     runShell(
       processRunner,
@@ -233,6 +284,7 @@ export const make = Effect.fn("ArkService.make")(function* () {
     captureTmux,
     sendTmuxText,
     sendTmuxKey,
+    saveTmuxImage,
     stopTmux,
   });
 });

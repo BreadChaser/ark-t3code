@@ -314,6 +314,7 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.arkCaptureTmux, AuthTerminalOperateScope],
   [WS_METHODS.arkSendTmuxText, AuthTerminalOperateScope],
   [WS_METHODS.arkSendTmuxKey, AuthTerminalOperateScope],
+  [WS_METHODS.arkSaveTmuxImage, AuthTerminalOperateScope],
   [WS_METHODS.arkStopTmux, AuthTerminalOperateScope],
   [WS_METHODS.subscribeVcsStatus, AuthOrchestrationReadScope],
   [WS_METHODS.vcsRefreshStatus, AuthOrchestrationReadScope],
@@ -1494,6 +1495,10 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "ark",
             },
           ),
+        [WS_METHODS.arkSaveTmuxImage]: (input) =>
+          observeRpcEffect(WS_METHODS.arkSaveTmuxImage, ark.saveTmuxImage(input), {
+            "rpc.aggregate": "ark",
+          }),
         [WS_METHODS.arkStopTmux]: (input) =>
           observeRpcEffect(WS_METHODS.arkStopTmux, ark.stopTmux(input.name, input.machineIp), {
             "rpc.aggregate": "ark",

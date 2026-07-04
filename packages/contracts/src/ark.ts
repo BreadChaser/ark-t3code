@@ -70,6 +70,19 @@ export const ArkTmuxSendKeyInput = Schema.Struct({
 });
 export type ArkTmuxSendKeyInput = typeof ArkTmuxSendKeyInput.Type;
 
+export const ArkTmuxSaveImageInput = Schema.Struct({
+  machineIp: Schema.optional(Schema.String),
+  name: Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(180)),
+  mimeType: Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(80)),
+  dataBase64: Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(30_000_000)),
+});
+export type ArkTmuxSaveImageInput = typeof ArkTmuxSaveImageInput.Type;
+
+export const ArkTmuxSaveImageResult = Schema.Struct({
+  path: Schema.String,
+});
+export type ArkTmuxSaveImageResult = typeof ArkTmuxSaveImageResult.Type;
+
 export class ArkOperationError extends Schema.TaggedErrorClass<ArkOperationError>()(
   "ArkOperationError",
   {

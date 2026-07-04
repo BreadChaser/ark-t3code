@@ -101,4 +101,34 @@ describe("ArkService", () => {
       assert.equal(error.operation, "ark.sendTmuxKey");
     }).pipe(Effect.provide(testLayer(() => Effect.die("unexpected process call")))),
   );
+
+  it.effect("saves pasted images on the target machine through stdin", () =>
+    Effect.gen(function* () {
+      const ark = yield* ArkService.make();
+      const result = yield* ark.saveTmuxImage({
+        machineIp: "100.94.206.66",
+        name: "screen shot.png",
+        mimeType: "image/png",
+        dataBase64: "aGVsbG8=",
+      });
+      assert.equal(result.path, "/home/tony/.ark/uploads/screen-shot.png");
+    }).pipe(
+      Effect.provide(
+        testLayer((request) => {
+          const command = request.args[1] ?? "";
+          assert.match(command, /tailscale ssh '100\.94\.206\.66'/u);
+          assert.match(command, /base64 -d/u);
+          assert.equal(request.stdin, "aGVsbG8=");
+          return Effect.succeed({
+            stdout: "/home/tony/.ark/uploads/screen-shot.png",
+            stderr: "",
+            code: ChildProcessSpawner.ExitCode(0),
+            timedOut: false,
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          });
+        }),
+      ),
+    ),
+  );
 });
