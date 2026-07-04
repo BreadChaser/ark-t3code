@@ -112,4 +112,23 @@ it.layer(NodeServices.layer)("EnvironmentAuthPolicy.layer", (it) => {
       ),
     ),
   );
+
+  it.effect("uses unsafe-no-auth policy when explicitly enabled", () =>
+    Effect.gen(function* () {
+      const policy = yield* EnvironmentAuthPolicy.EnvironmentAuthPolicy;
+      const descriptor = yield* policy.getDescriptor();
+
+      expect(descriptor.policy).toBe("unsafe-no-auth");
+      expect(descriptor.bootstrapMethods).toEqual([]);
+      expect(descriptor.sessionMethods).toEqual([]);
+    }).pipe(
+      Effect.provide(
+        makeEnvironmentAuthPolicyLayer({
+          mode: "web",
+          host: "0.0.0.0",
+          unsafeNoAuth: true,
+        }),
+      ),
+    ),
+  );
 });

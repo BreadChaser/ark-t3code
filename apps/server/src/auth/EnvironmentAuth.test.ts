@@ -100,6 +100,25 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
     }).pipe(Effect.provide(makeEnvironmentAuthLayer())),
   );
 
+  it.effect("authenticates every request in unsafe-no-auth mode", () =>
+    Effect.gen(function* () {
+      const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+
+      const state = yield* serverAuth.getSessionState({ cookies: {}, headers: {} } as never);
+      const session = yield* serverAuth.authenticateHttpRequest({
+        cookies: {},
+        headers: {},
+      } as never);
+      const ticket = yield* serverAuth.issueWebSocketTicket(session);
+
+      expect(state.authenticated).toBe(true);
+      expect(state.auth.policy).toBe("unsafe-no-auth");
+      expect(session.subject).toBe("unsafe-no-auth");
+      expect(session.scopes).toEqual(AuthAdministrativeScopes);
+      expect(ticket.ticket).toBe("unsafe-no-auth");
+    }).pipe(Effect.provide(makeEnvironmentAuthLayer({ unsafeNoAuth: true }))),
+  );
+
   it.effect("does not exchange ordinary pairing grants for administrative access tokens", () =>
     Effect.gen(function* () {
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;

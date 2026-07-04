@@ -2,6 +2,7 @@ import {
   AuthAccessTokenType,
   AuthAccessWriteScope,
   AuthAdministrativeScopes,
+  AuthSessionId,
   AuthStandardClientScopes,
   type AuthAccessTokenResult,
   type AuthBrowserSessionResult,
@@ -11,7 +12,6 @@ import {
   type AuthEnvironmentScope,
   type AuthPairingLink,
   type AuthPairingCredentialResult,
-  type AuthSessionId,
   type AuthSessionState,
   type ServerAuthDescriptor,
   type ServerAuthSessionMethod,
@@ -560,6 +560,12 @@ export const make = Effect.gen(function* () {
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
   const crypto = yield* Crypto.Crypto;
   const descriptor = yield* policy.getDescriptor();
+  const unsafeNoAuthSession: AuthenticatedSession = {
+    sessionId: AuthSessionId.make("unsafe-no-auth"),
+    subject: "unsafe-no-auth",
+    method: "bearer-access-token",
+    scopes: AuthAdministrativeScopes,
+  };
 
   const authenticateToken = (
     token: string,
@@ -591,6 +597,10 @@ export const make = Effect.gen(function* () {
   const authenticateRequest = (
     request: HttpServerRequest.HttpServerRequest,
   ): Effect.Effect<AuthenticatedSession, ServerAuthCredentialError | ServerAuthInternalError> => {
+    if (descriptor.policy === "unsafe-no-auth") {
+      return Effect.succeed(unsafeNoAuthSession);
+    }
+
     const cookieToken = request.cookies[sessions.cookieName];
     const bearerToken = parseBearerToken(request);
     const dpopToken = parseDpopToken(request);
@@ -916,17 +926,28 @@ export const make = Effect.gen(function* () {
     );
 
   const issueWebSocketTicket: EnvironmentAuth["Service"]["issueWebSocketTicket"] = (session) =>
-    sessions.issueWebSocketToken(session.sessionId).pipe(
-      Effect.mapError((cause) => new ServerAuthWebSocketTokenIssueError({ cause })),
-      Effect.map(
-        (issued) =>
-          ({
-            ticket: issued.token,
-            expiresAt: DateTime.toUtc(issued.expiresAt),
-          }) satisfies AuthWebSocketTicketResult,
-      ),
-      Effect.withSpan("EnvironmentAuth.issueWebSocketTicket"),
-    );
+    descriptor.policy === "unsafe-no-auth"
+      ? DateTime.now.pipe(
+          Effect.map(
+            (now) =>
+              ({
+                ticket: "unsafe-no-auth",
+                expiresAt: DateTime.toUtc(DateTime.add(now, { hours: 1 })),
+              }) satisfies AuthWebSocketTicketResult,
+          ),
+          Effect.withSpan("EnvironmentAuth.issueWebSocketTicket"),
+        )
+      : sessions.issueWebSocketToken(session.sessionId).pipe(
+          Effect.mapError((cause) => new ServerAuthWebSocketTokenIssueError({ cause })),
+          Effect.map(
+            (issued) =>
+              ({
+                ticket: issued.token,
+                expiresAt: DateTime.toUtc(issued.expiresAt),
+              }) satisfies AuthWebSocketTicketResult,
+          ),
+          Effect.withSpan("EnvironmentAuth.issueWebSocketTicket"),
+        );
 
   const authenticateHttpRequest: EnvironmentAuth["Service"]["authenticateHttpRequest"] = (
     request,
