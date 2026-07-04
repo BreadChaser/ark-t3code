@@ -654,7 +654,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
           kind === "hosted-link"
             ? "Open it in the browser on the device you want to connect."
             : kind === "link"
-              ? "Open it in the client you want to pair to this environment."
+              ? "Open it in the client you want to pair to this backend."
               : "Paste it into another client to finish pairing.",
       });
     },
@@ -1538,7 +1538,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
       return;
     }
     if (enabled && !tokenResult.value) {
-      reportUpdateFailure(new Error("Sign in to T3 Connect before linking this environment."));
+      reportUpdateFailure(new Error("Sign in to T3 Connect before linking this backend."));
       setIsUpdating(false);
       return;
     }
@@ -1575,8 +1575,8 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
       type: "success",
       title: enabled ? "T3 Connect linked" : "T3 Connect unlinked",
       description: enabled
-        ? "This environment is available through T3 Connect."
-        : "This environment is no longer available through T3 Connect.",
+        ? "This backend is available through T3 Connect."
+        : "This backend is no longer available through T3 Connect.",
     });
     setIsUpdating(false);
   };
@@ -1607,13 +1607,13 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
       type: "success",
       title: enabled ? "Agent activity enabled" : "Agent activity disabled",
       description: enabled
-        ? "This environment can publish agent activity to your mobile clients."
-        : "This environment will stop publishing agent activity.",
+        ? "This backend can publish agent activity to your mobile clients."
+        : "This backend will stop publishing agent activity.",
     });
     setIsUpdatingPreference(false);
   };
   const disabledReason = !isSignedIn
-    ? "Sign in to T3 Connect to manage this environment."
+    ? "Sign in to T3 Connect to manage this backend."
     : !canManageRelay
       ? "Your session does not have permission to manage T3 Connect access."
       : null;
@@ -1625,8 +1625,8 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
         title="T3 Connect"
         description={
           linked
-            ? "This environment is available to your other devices through T3 Connect."
-            : "Make this environment available to your other devices through T3 Connect."
+            ? "This backend is available to your other devices through T3 Connect."
+            : "Make this backend available to your other devices through T3 Connect."
         }
         status={operationError ?? primaryCloudLinkState.error}
         control={
@@ -1643,7 +1643,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
       {linked ? (
         <SettingsRow
           title="Publish agent activity"
-          description="Send activity from this environment to your mobile clients for push notifications and Live Activities."
+          description="Send activity from this backend to your mobile clients for push notifications and Live Activities."
           className="bg-muted/20 pl-7 sm:pl-8"
           control={
             <Switch
@@ -1676,7 +1676,7 @@ function EmptyRemoteEnvironments({ cloudEnabled = true }: { readonly cloudEnable
         <ChevronsLeftRightEllipsisIcon />
       </EmptyMedia>
       <EmptyHeader>
-        <EmptyTitle>No saved remote environments</EmptyTitle>
+        <EmptyTitle>No saved Tailscale backends</EmptyTitle>
         <EmptyDescription>
           {cloudEnabled
             ? "Click “Add environment” to pair another environment, or connect one from T3 Connect."
@@ -3080,7 +3080,7 @@ export function ConnectionsSettings() {
     <SettingsPageContainer>
       {canManageLocalBackend ? (
         <>
-          <SettingsSection title="This environment">
+          <SettingsSection title="Local backend">
             {primaryVersionMismatch ? (
               <SettingsRow
                 title="Version drift"
@@ -3341,7 +3341,7 @@ export function ConnectionsSettings() {
           </Dialog>
         </>
       ) : (
-        <SettingsSection title="This environment">
+        <SettingsSection title="Local backend">
           <SettingsRow
             title="Administrative access"
             description="Pairing links and client-session management require the access:write scope for this backend."
@@ -3351,7 +3351,7 @@ export function ConnectionsSettings() {
       )}
 
       <SettingsSection
-        title="Remote environments"
+        title="Tailscale / tmux backends"
         headerAction={
           <Dialog
             open={addBackendDialogOpen}

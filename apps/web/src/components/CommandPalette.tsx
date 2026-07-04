@@ -48,6 +48,7 @@ import {
 import { useAtomValue } from "@effect/atom-react";
 import { OpenAddProjectCommandPaletteProvider } from "../commandPaletteContext";
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
+import { connectTrustedEnvironment as connectTrustedEnvironmentAtom } from "../connection/onboarding";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useClientSettings } from "../hooks/useSettings";
@@ -469,6 +470,9 @@ function OpenCommandPaletteDialog(props: {
   const cloneRepository = useAtomCommand(sourceControlEnvironment.cloneRepository, {
     reportFailure: false,
   });
+  const connectTrustedEnvironment = useAtomCommand(connectTrustedEnvironmentAtom, {
+    reportFailure: false,
+  });
   const { environments } = useEnvironments();
   const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironment = usePrimaryEnvironment();
@@ -485,6 +489,8 @@ function OpenCommandPaletteDialog(props: {
   );
   const [isPickingProjectFolder, setIsPickingProjectFolder] = useState(false);
   const [addProjectCloneFlow, setAddProjectCloneFlow] = useState<AddProjectCloneFlow | null>(null);
+  const [isTrustedBackendFlow, setIsTrustedBackendFlow] = useState(false);
+  const [isAddingTrustedBackend, setIsAddingTrustedBackend] = useState(false);
   const [isRemoteProjectLookingUp, setIsRemoteProjectLookingUp] = useState(false);
   const [isRemoteProjectCloning, setIsRemoteProjectCloning] = useState(false);
   const primaryEnvironmentId = primaryEnvironment?.environmentId ?? null;
@@ -564,7 +570,9 @@ function OpenCommandPaletteDialog(props: {
   const isRemoteProjectCloneFlow = addProjectCloneFlow !== null;
   const isRemoteProjectRepositoryStep = addProjectCloneFlow?.step === "repository";
   const isBrowsing =
-    !isRemoteProjectRepositoryStep && isFilesystemBrowseQuery(query, browseEnvironmentPlatform);
+    !isTrustedBackendFlow &&
+    !isRemoteProjectRepositoryStep &&
+    isFilesystemBrowseQuery(query, browseEnvironmentPlatform);
   const paletteMode = getCommandPaletteMode({ currentView, isBrowsing });
   const getAddProjectInitialQueryForEnvironment = useCallback(
     (environmentId: EnvironmentId | null): string => {
@@ -740,6 +748,7 @@ function OpenCommandPaletteDialog(props: {
 
   function popView(): void {
     setAddProjectCloneFlow(null);
+    setIsTrustedBackendFlow(false);
     if (viewStack.length <= 1) {
       setAddProjectEnvironmentId(null);
     }
@@ -787,10 +796,16 @@ function OpenCommandPaletteDialog(props: {
     void navigate({ to: "/settings/source-control" });
   }, [navigate, setOpen]);
 
-  const openConnectionsSettings = useCallback(() => {
-    setOpen(false);
-    void navigate({ to: "/settings/connections" });
-  }, [navigate, setOpen]);
+  const startTrustedBackendFlow = useCallback(() => {
+    setAddProjectEnvironmentId(null);
+    setAddProjectCloneFlow(null);
+    setIsTrustedBackendFlow(true);
+    pushPaletteView({
+      addonIcon: <NetworkIcon className={ADDON_ICON_CLASS} />,
+      groups: [],
+      initialQuery: "",
+    });
+  }, []);
 
   const buildAddProjectSourceGroups = useCallback(
     (
@@ -815,10 +830,11 @@ function OpenCommandPaletteDialog(props: {
           value: `action:add-project:${environmentId}:tailscale-tmux`,
           searchTerms: ["tailscale", "tmux", "backend", "environment", "remote", "gaming pc"],
           title: "Tailscale / tmux backend",
-          description: "Connect a trusted backend URL first",
+          description: "Connect a trusted backend URL",
           icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
+          keepOpen: true,
           run: async () => {
-            openConnectionsSettings();
+            startTrustedBackendFlow();
           },
         },
       ];
@@ -895,10 +911,10 @@ function OpenCommandPaletteDialog(props: {
       return [{ value: `sources:${environmentId}`, label: "Sources", items: sourceItems }];
     },
     [
-      openConnectionsSettings,
       openSourceControlSettings,
       startAddProjectBrowse,
       startAddProjectClone,
+      startTrustedBackendFlow,
     ],
   );
 
@@ -1371,6 +1387,36 @@ function OpenCommandPaletteDialog(props: {
     await handleAddProject(cloneResult.value.cwd);
   }
 
+  async function submitTrustedBackendFlow(): Promise<void> {
+    const httpBaseUrl = query.trim();
+    if (httpBaseUrl.length === 0 || isAddingTrustedBackend) {
+      return;
+    }
+
+    setIsAddingTrustedBackend(true);
+    const result = await connectTrustedEnvironment({ httpBaseUrl });
+    setIsAddingTrustedBackend(false);
+    if (result._tag === "Failure") {
+      if (!isAtomCommandInterrupted(result)) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to add Tailscale backend",
+            description: errorMessage(squashAtomCommandFailure(result)),
+          }),
+        );
+      }
+      return;
+    }
+
+    toastManager.add({
+      type: "success",
+      title: "Tailscale backend connected",
+      description: "Use Add project again to browse folders from it.",
+    });
+    setOpen(false);
+  }
+
   function browseTo(name: string): void {
     const nextQuery = appendBrowsePathSegment(query, name);
     setHighlightedItemValue(null);
@@ -1430,7 +1476,7 @@ function OpenCommandPaletteDialog(props: {
   }, [addProjectCloneFlow]);
 
   let displayedGroups: CommandPaletteView["groups"] = filteredGroups;
-  if (addProjectCloneFlow?.step === "repository") {
+  if (isTrustedBackendFlow || addProjectCloneFlow?.step === "repository") {
     displayedGroups = [];
   } else if (addProjectCloneFlow?.step === "confirm") {
     displayedGroups = relativePathNeedsActiveProject ? [] : cloneDestinationBrowseGroups;
@@ -1439,6 +1485,7 @@ function OpenCommandPaletteDialog(props: {
   }
 
   const inputPlaceholder =
+    (isTrustedBackendFlow ? "Enter Tailscale backend URL" : null) ??
     remoteProjectInputPlaceholder(addProjectCloneFlow) ??
     getCommandPaletteInputPlaceholder(paletteMode);
   const isSubmenu = paletteMode === "submenu" || paletteMode === "submenu-browse";
@@ -1471,6 +1518,8 @@ function OpenCommandPaletteDialog(props: {
     addProjectCloneFlow?.step === "repository" &&
     query.trim().length > 0 &&
     !isRemoteProjectPending;
+  const canSubmitTrustedBackendFlow =
+    isTrustedBackendFlow && query.trim().length > 0 && !isAddingTrustedBackend;
   const fileManagerName = getLocalFileManagerName(navigator.platform);
   const canOpenProjectFromFileManager =
     isBrowsing &&
@@ -1513,6 +1562,12 @@ function OpenCommandPaletteDialog(props: {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (isTrustedBackendFlow && event.key === "Enter") {
+      event.preventDefault();
+      void submitTrustedBackendFlow();
+      return;
+    }
+
     if (addProjectCloneFlow?.step === "repository" && event.key === "Enter") {
       event.preventDefault();
       void submitAddProjectCloneFlow();
@@ -1691,9 +1746,11 @@ function OpenCommandPaletteDialog(props: {
       }}
     >
       <Command
-        key={`${viewStack.length}-${browseGeneration}-${isBrowsing}-${addProjectCloneFlow?.step ?? "none"}`}
+        key={`${viewStack.length}-${browseGeneration}-${isBrowsing}-${isTrustedBackendFlow}-${addProjectCloneFlow?.step ?? "none"}`}
         aria-label="Command palette"
-        autoHighlight={isBrowsing || isRemoteProjectCloneFlow ? false : "always"}
+        autoHighlight={
+          isBrowsing || isRemoteProjectCloneFlow || isTrustedBackendFlow ? false : "always"
+        }
         mode="none"
         onItemHighlighted={(value) => {
           setHighlightedItemValue(typeof value === "string" ? value : null);
@@ -1704,7 +1761,7 @@ function OpenCommandPaletteDialog(props: {
         <div className="relative">
           <CommandInput
             className={
-              addProjectCloneFlow?.step === "repository"
+              isTrustedBackendFlow || addProjectCloneFlow?.step === "repository"
                 ? "pe-32"
                 : isBrowsing
                   ? willCreateProjectPath
@@ -1736,7 +1793,34 @@ function OpenCommandPaletteDialog(props: {
                 : {})}
             onKeyDown={handleKeyDown}
           />
-          {addProjectCloneFlow?.step === "repository" ? (
+          {isTrustedBackendFlow ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    tabIndex={-1}
+                    className="absolute inset-e-2.5 top-1/2 gap-1.5 pe-1 ps-2 -translate-y-1/2"
+                    aria-label="Connect backend (Enter)"
+                    disabled={!canSubmitTrustedBackendFlow}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
+                    onClick={() => {
+                      void submitTrustedBackendFlow();
+                    }}
+                  />
+                }
+              >
+                <span>{isAddingTrustedBackend ? "Adding" : "Connect"}</span>
+                <KbdGroup className="pointer-events-none -me-0.5 items-center gap-1">
+                  <Kbd>Enter</Kbd>
+                </KbdGroup>
+              </TooltipTrigger>
+              <TooltipPopup side="top">Connect backend (Enter)</TooltipPopup>
+            </Tooltip>
+          ) : addProjectCloneFlow?.step === "repository" ? (
             <Tooltip>
               <TooltipTrigger
                 render={
