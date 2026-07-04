@@ -3093,8 +3093,12 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         )}
 
         {projectsLength === 0 && (
-          <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
-            No projects yet
+          <div className="px-2 pt-4 text-center">
+            <div className="mb-2 text-xs text-muted-foreground/60">No projects yet</div>
+            <Button size="sm" className="w-full justify-center" onClick={openAddProject}>
+              <FolderPlusIcon className="size-4" />
+              Add project or tmux
+            </Button>
           </div>
         )}
       </SidebarGroup>
