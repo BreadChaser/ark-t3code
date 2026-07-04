@@ -2987,7 +2987,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       <SidebarGroup className="px-2 py-2">
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            Projects
+            {projectsLength === 0 ? "Ark" : "Projects"}
           </span>
           <div className="flex items-center gap-1">
             <ProjectSortMenu
@@ -3094,7 +3094,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
 
         {projectsLength === 0 && (
           <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
-            No projects yet
+            Open Ark sessions on the right
           </div>
         )}
       </SidebarGroup>
