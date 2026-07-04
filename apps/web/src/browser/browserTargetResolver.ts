@@ -46,7 +46,7 @@ export function resolveBrowserNavigationTarget(
   const environmentUrl = new URL(connection.httpBaseUrl);
   if (!isPrivateNetworkHost(environmentUrl.hostname)) {
     throw new Error(
-      "This environment port needs the planned authenticated preview gateway; its server address is not directly private-network reachable.",
+      "This backend port needs the planned authenticated preview gateway; its server address is not directly private-network reachable.",
     );
   }
   const protocol = target.protocol ?? "http";

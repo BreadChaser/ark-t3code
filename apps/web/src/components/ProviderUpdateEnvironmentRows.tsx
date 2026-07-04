@@ -308,7 +308,7 @@ export function ProviderUpdateEnvironmentRows({
           setErrorByEnvironment((previous) =>
             new Map(previous).set(
               environmentId,
-              "This environment isn’t connected — try again once it reconnects.",
+              "This backend isn’t connected — try again once it reconnects.",
             ),
           );
           return;

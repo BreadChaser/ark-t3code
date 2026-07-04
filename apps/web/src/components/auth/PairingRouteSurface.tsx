@@ -301,7 +301,7 @@ function errorMessageFromUnknown(error: unknown): string {
 
 function describeAuthGate(bootstrapMethods: ReadonlyArray<string>): string {
   if (bootstrapMethods.includes("desktop-bootstrap")) {
-    return "This environment expects a trusted pairing credential before the app can connect.";
+    return "This backend expects a trusted pairing credential before the app can connect.";
   }
 
   return "Enter a pairing token to start a session with this environment.";
@@ -316,8 +316,8 @@ function describeSupportedMethods(bootstrapMethods: ReadonlyArray<string>): stri
   }
 
   if (bootstrapMethods.includes("desktop-bootstrap")) {
-    return "This environment is desktop-managed. Open it from the desktop app or paste a bootstrap credential if one was issued explicitly.";
+    return "This backend is desktop-managed. Open it from the desktop app or paste a bootstrap credential if one was issued explicitly.";
   }
 
-  return "This environment accepts one-time pairing tokens. Pairing links can open this page directly, or you can paste the token here.";
+  return "This backend accepts one-time pairing tokens. Pairing links can open this page directly, or you can paste the token here.";
 }
