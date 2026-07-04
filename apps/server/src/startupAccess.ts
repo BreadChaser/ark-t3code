@@ -9,8 +9,8 @@ import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 
 export interface HeadlessServeAccessInfo {
   readonly connectionString: string;
-  readonly token: string;
-  readonly pairingUrl: string;
+  readonly token: string | undefined;
+  readonly pairingUrl: string | undefined;
 }
 
 type NetworkInterfacesMap = ReturnType<typeof NodeOS.networkInterfaces>;
@@ -120,15 +120,22 @@ export const renderTerminalQrCode = (value: string, margin = 2): string => {
 };
 
 export const formatHeadlessServeOutput = (accessInfo: HeadlessServeAccessInfo): string =>
-  [
-    "T3 Code server is ready.",
-    `Connection string: ${accessInfo.connectionString}`,
-    `Token: ${accessInfo.token}`,
-    `Pairing URL: ${accessInfo.pairingUrl}`,
-    "",
-    renderTerminalQrCode(accessInfo.pairingUrl),
-    "",
-  ].join("\n");
+  accessInfo.pairingUrl
+    ? [
+        "T3 Code server is ready.",
+        `Connection string: ${accessInfo.connectionString}`,
+        `Token: ${accessInfo.token}`,
+        `Pairing URL: ${accessInfo.pairingUrl}`,
+        "",
+        renderTerminalQrCode(accessInfo.pairingUrl),
+        "",
+      ].join("\n")
+    : [
+        "T3 Code server is ready.",
+        `Connection string: ${accessInfo.connectionString}`,
+        "Pairing: disabled",
+        "",
+      ].join("\n");
 
 export const issueHeadlessServeAccessInfo = Effect.fn("issueHeadlessServeAccessInfo")(function* () {
   const serverConfig = yield* ServerConfig;
@@ -138,6 +145,15 @@ export const issueHeadlessServeAccessInfo = Effect.fn("issueHeadlessServeAccessI
     serverConfig.host,
     resolveListeningPort(httpServer.address, serverConfig.port),
   );
+
+  if (serverConfig.unsafeNoAuth) {
+    return {
+      connectionString,
+      token: undefined,
+      pairingUrl: undefined,
+    } satisfies HeadlessServeAccessInfo;
+  }
+
   const issued = yield* serverAuth.issueStartupPairingCredential();
 
   return {
