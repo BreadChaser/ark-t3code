@@ -47,6 +47,10 @@
       "types": "./src/state/assets.ts",
       "default": "./src/state/assets.ts"
     },
+    "./state/ark": {
+      "types": "./src/state/ark.ts",
+      "default": "./src/state/ark.ts"
+    },
     "./state/connections": {
       "types": "./src/state/connections.ts",
       "default": "./src/state/connections.ts"

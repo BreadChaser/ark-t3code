@@ -90,6 +90,8 @@ import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as ReviewService from "./review/ReviewService.ts";
+import * as ArkService from "./ark/ArkService.ts";
+import * as ProcessRunner from "./processRunner.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
@@ -306,6 +308,13 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.shellOpenInEditor, AuthOrchestrationOperateScope],
   [WS_METHODS.filesystemBrowse, AuthOrchestrationReadScope],
   [WS_METHODS.assetsCreateUrl, AuthOrchestrationReadScope],
+  [WS_METHODS.arkListMachines, AuthOrchestrationReadScope],
+  [WS_METHODS.arkListTmuxSessions, AuthTerminalOperateScope],
+  [WS_METHODS.arkEnsureTmux, AuthTerminalOperateScope],
+  [WS_METHODS.arkCaptureTmux, AuthTerminalOperateScope],
+  [WS_METHODS.arkSendTmuxText, AuthTerminalOperateScope],
+  [WS_METHODS.arkSendTmuxKey, AuthTerminalOperateScope],
+  [WS_METHODS.arkStopTmux, AuthTerminalOperateScope],
   [WS_METHODS.subscribeVcsStatus, AuthOrchestrationReadScope],
   [WS_METHODS.vcsRefreshStatus, AuthOrchestrationReadScope],
   [WS_METHODS.vcsPull, AuthOrchestrationOperateScope],
@@ -400,6 +409,7 @@ const makeWsRpcLayer = (
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
       const review = yield* ReviewService.ReviewService;
+      const ark = yield* ArkService.make().pipe(Effect.provide(ProcessRunner.layer));
       const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
       const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
       const terminalManager = yield* TerminalManager.TerminalManager;
@@ -1450,6 +1460,36 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "workspace" },
           ),
+        [WS_METHODS.arkListMachines]: (_input) =>
+          observeRpcEffect(WS_METHODS.arkListMachines, ark.listMachines(), {
+            "rpc.aggregate": "ark",
+          }),
+        [WS_METHODS.arkListTmuxSessions]: (_input) =>
+          observeRpcEffect(WS_METHODS.arkListTmuxSessions, ark.listTmuxSessions(), {
+            "rpc.aggregate": "ark",
+          }),
+        [WS_METHODS.arkEnsureTmux]: (input) =>
+          observeRpcEffect(WS_METHODS.arkEnsureTmux, ark.ensureTmux(input.name), {
+            "rpc.aggregate": "ark",
+          }),
+        [WS_METHODS.arkCaptureTmux]: (input) =>
+          observeRpcEffect(WS_METHODS.arkCaptureTmux, ark.captureTmux(input.name, input.scroll), {
+            "rpc.aggregate": "ark",
+          }),
+        [WS_METHODS.arkSendTmuxText]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.arkSendTmuxText,
+            ark.sendTmuxText(input.name, input.text, input.submit),
+            { "rpc.aggregate": "ark" },
+          ),
+        [WS_METHODS.arkSendTmuxKey]: (input) =>
+          observeRpcEffect(WS_METHODS.arkSendTmuxKey, ark.sendTmuxKey(input.name, input.key), {
+            "rpc.aggregate": "ark",
+          }),
+        [WS_METHODS.arkStopTmux]: (input) =>
+          observeRpcEffect(WS_METHODS.arkStopTmux, ark.stopTmux(input.name), {
+            "rpc.aggregate": "ark",
+          }),
         [WS_METHODS.subscribeVcsStatus]: (input) =>
           observeRpcStream(
             WS_METHODS.subscribeVcsStatus,

@@ -15,6 +15,16 @@ import {
 } from "./filesystem.ts";
 import { AssetAccessError, AssetCreateUrlInput, AssetCreateUrlResult } from "./assets.ts";
 import {
+  ArkListMachinesResult,
+  ArkListTmuxSessionsResult,
+  ArkOperationError,
+  ArkTmuxCaptureInput,
+  ArkTmuxCaptureResult,
+  ArkTmuxInput,
+  ArkTmuxSendKeyInput,
+  ArkTmuxSendTextInput,
+} from "./ark.ts";
+import {
   GitActionProgressEvent,
   VcsSwitchRefInput,
   VcsSwitchRefResult,
@@ -160,6 +170,15 @@ export const WS_METHODS = {
   // Filesystem methods
   filesystemBrowse: "filesystem.browse",
   assetsCreateUrl: "assets.createUrl",
+
+  // Ark methods
+  arkListMachines: "ark.listMachines",
+  arkListTmuxSessions: "ark.listTmuxSessions",
+  arkEnsureTmux: "ark.ensureTmux",
+  arkCaptureTmux: "ark.captureTmux",
+  arkSendTmuxText: "ark.sendTmuxText",
+  arkSendTmuxKey: "ark.sendTmuxKey",
+  arkStopTmux: "ark.stopTmux",
 
   // VCS methods
   vcsPull: "vcs.pull",
@@ -393,6 +412,44 @@ export const WsAssetsCreateUrlRpc = Rpc.make(WS_METHODS.assetsCreateUrl, {
   payload: AssetCreateUrlInput,
   success: AssetCreateUrlResult,
   error: Schema.Union([AssetAccessError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkListMachinesRpc = Rpc.make(WS_METHODS.arkListMachines, {
+  payload: Schema.Struct({}),
+  success: ArkListMachinesResult,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkListTmuxSessionsRpc = Rpc.make(WS_METHODS.arkListTmuxSessions, {
+  payload: Schema.Struct({}),
+  success: ArkListTmuxSessionsResult,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkEnsureTmuxRpc = Rpc.make(WS_METHODS.arkEnsureTmux, {
+  payload: ArkTmuxInput,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkCaptureTmuxRpc = Rpc.make(WS_METHODS.arkCaptureTmux, {
+  payload: ArkTmuxCaptureInput,
+  success: ArkTmuxCaptureResult,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkSendTmuxTextRpc = Rpc.make(WS_METHODS.arkSendTmuxText, {
+  payload: ArkTmuxSendTextInput,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkSendTmuxKeyRpc = Rpc.make(WS_METHODS.arkSendTmuxKey, {
+  payload: ArkTmuxSendKeyInput,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkStopTmuxRpc = Rpc.make(WS_METHODS.arkStopTmux, {
+  payload: ArkTmuxInput,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
 });
 
 export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
@@ -706,6 +763,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAssetsCreateUrlRpc,
+  WsArkListMachinesRpc,
+  WsArkListTmuxSessionsRpc,
+  WsArkEnsureTmuxRpc,
+  WsArkCaptureTmuxRpc,
+  WsArkSendTmuxTextRpc,
+  WsArkSendTmuxKeyRpc,
+  WsArkStopTmuxRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
   WsVcsRefreshStatusRpc,
