@@ -50,7 +50,7 @@ export interface DesktopSettingsChange {
 export const DEFAULT_TAILSCALE_SERVE_PORT = 443;
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
-  serverExposureMode: "local-only",
+  serverExposureMode: "network-accessible",
   tailscaleServeEnabled: false,
   tailscaleServePort: DEFAULT_TAILSCALE_SERVE_PORT,
   updateChannel: "latest",
@@ -177,8 +177,7 @@ function normalizeDesktopSettingsDocument(
     (parsed.wslBackendEnabled === undefined && parsed.wslMode === "wsl");
 
   return {
-    serverExposureMode:
-      parsed.serverExposureMode === "network-accessible" ? "network-accessible" : "local-only",
+    serverExposureMode: parsed.serverExposureMode ?? defaultSettings.serverExposureMode,
     tailscaleServeEnabled: parsed.tailscaleServeEnabled === true,
     tailscaleServePort: normalizeTailscaleServePort(parsed.tailscaleServePort),
     updateChannel: updateChannelConfiguredByUser

@@ -91,7 +91,7 @@ describe("DesktopSettings", () => {
     assert.deepEqual(
       DesktopAppSettings.resolveDefaultDesktopSettings("0.0.17-nightly.20260415.1"),
       {
-        serverExposureMode: "local-only",
+        serverExposureMode: "network-accessible",
         tailscaleServeEnabled: false,
         tailscaleServePort: 443,
         updateChannel: "nightly",
@@ -153,7 +153,7 @@ describe("DesktopSettings", () => {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* fileSystem.makeDirectory(environment.desktopSettingsPath, { recursive: true });
 
-        const error = yield* settings.setServerExposureMode("network-accessible").pipe(Effect.flip);
+        const error = yield* settings.setServerExposureMode("local-only").pipe(Effect.flip);
         assert.instanceOf(error, DesktopAppSettings.DesktopSettingsWriteError);
         assert.equal(error.operation, "replace-settings-file");
         assert.equal(error.path, environment.desktopSettingsPath);
@@ -171,7 +171,7 @@ describe("DesktopSettings", () => {
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
 
-        const exposure = yield* settings.setServerExposureMode("local-only");
+        const exposure = yield* settings.setServerExposureMode("network-accessible");
         assert.isFalse(exposure.changed);
 
         const tailscale = yield* settings.setTailscaleServe({
@@ -239,13 +239,13 @@ describe("DesktopSettings", () => {
         const fileSystem = yield* FileSystem.FileSystem;
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
 
-        yield* settings.setServerExposureMode("network-accessible");
+        yield* settings.setServerExposureMode("local-only");
 
         const persisted = yield* decodeDesktopSettingsPatch(
           yield* fileSystem.readFileString(environment.desktopSettingsPath),
         );
         assert.deepEqual(persisted, {
-          serverExposureMode: "network-accessible",
+          serverExposureMode: "local-only",
         } satisfies typeof DesktopSettingsPatch.Type);
       }),
     ),
@@ -310,7 +310,7 @@ describe("DesktopSettings", () => {
         });
 
         assert.deepEqual(yield* settings.load, {
-          serverExposureMode: "local-only",
+          serverExposureMode: "network-accessible",
           tailscaleServeEnabled: true,
           tailscaleServePort: 443,
           updateChannel: "latest",

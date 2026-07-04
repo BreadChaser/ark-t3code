@@ -179,7 +179,7 @@ describe("DesktopServerExposure", () => {
     ),
   );
 
-  it.effect("persists network-accessible mode and updates backend binding state", () =>
+  it.effect("uses network-accessible mode by default and updates backend binding state", () =>
     withHarness(
       lanNetworkInterfaces,
       Effect.gen(function* () {
@@ -190,7 +190,7 @@ describe("DesktopServerExposure", () => {
         yield* serverExposure.configureFromSettings({ port: 4173 });
 
         const change = yield* serverExposure.setMode("network-accessible");
-        assert.equal(change.requiresRelaunch, true);
+        assert.equal(change.requiresRelaunch, false);
         assert.deepEqual(change.state, {
           mode: "network-accessible",
           endpointUrl: "http://192.168.1.20:4173",
@@ -328,8 +328,10 @@ describe("DesktopServerExposure", () => {
       lanNetworkInterfaces,
       Effect.gen(function* () {
         const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* settings.setServerExposureMode("local-only");
         yield* serverExposure.configureFromSettings({ port: 4173 });
-        // mode stays at default "local-only", tailscaleServeEnabled stays false.
+        // Explicit local-only mode keeps Tailscale discovery gated off.
 
         const endpoints = yield* serverExposure.getAdvertisedEndpoints;
         // Only the loopback endpoint; no tailscale spawn means the dieOnSpawnLayer
