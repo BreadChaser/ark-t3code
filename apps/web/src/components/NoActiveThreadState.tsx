@@ -1,16 +1,10 @@
-import { FolderPlusIcon } from "lucide-react";
-
-import { useOpenAddProjectCommandPalette } from "../commandPaletteContext";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
-import { Button } from "./ui/button";
 import { SidebarInset } from "./ui/sidebar";
 import { isElectron } from "../env";
 import { cn } from "~/lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 export function NoActiveThreadState() {
-  const openAddProject = useOpenAddProjectCommandPalette();
-
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
@@ -41,12 +35,6 @@ export function NoActiveThreadState() {
               <EmptyDescription className="mt-2 text-sm text-muted-foreground/78">
                 Select an existing thread or create a new one to get started.
               </EmptyDescription>
-              <div className="mt-6 flex justify-center">
-                <Button size="sm" onClick={openAddProject}>
-                  <FolderPlusIcon className="size-4" />
-                  Add project or tmux
-                </Button>
-              </div>
             </EmptyHeader>
           </div>
         </Empty>

@@ -927,20 +927,8 @@ function OpenCommandPaletteDialog(props: {
           value: `action:add-project:${environmentId}:tailscale-tmux`,
           searchTerms: ["tailscale", "tmux", "backend", "environment", "remote", "gaming pc"],
           title: "Tailscale / tmux backend",
-          description: "Connect a trusted backend URL",
-          icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
-          keepOpen: true,
-          run: async () => {
-            startTrustedBackendFlow();
-          },
-        },
-        {
-          kind: "action",
-          value: `action:add-project:${environmentId}:tmux-sessions`,
-          searchTerms: ["tmux", "session", "terminal", "attach", "ark"],
-          title: "Tmux sessions",
           description: "List or create sessions on this backend",
-          icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
+          icon: <NetworkIcon className={ITEM_ICON_CLASS} />,
           keepOpen: true,
           run: async () => {
             await startTmuxSessionSelection(environmentId);
@@ -1023,7 +1011,6 @@ function OpenCommandPaletteDialog(props: {
       openSourceControlSettings,
       startAddProjectBrowse,
       startAddProjectClone,
-      startTrustedBackendFlow,
       startTmuxSessionSelection,
     ],
   );
