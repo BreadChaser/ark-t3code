@@ -57,17 +57,29 @@ describe("theme failure handling", () => {
     }
 
     try {
-      writeThemePreference("dark");
+      writeThemePreference("ark");
       expect.unreachable("expected the theme write to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(ThemeStorageError);
       expect(error).toMatchObject({
         operation: "write",
         storageKey: "t3code:theme",
-        theme: "dark",
+        theme: "ark",
         cause: writeCause,
       });
     }
+  });
+
+  it("accepts Ark as a stored theme preference", async () => {
+    vi.stubGlobal("window", {
+      localStorage: createStorage(),
+    });
+
+    const { readThemePreference, writeThemePreference } = await import("./useTheme");
+
+    writeThemePreference("ark");
+
+    expect(readThemePreference()).toBe("ark");
   });
 
   it("falls back during initial theme application and logs only safe attributes", async () => {
@@ -189,5 +201,16 @@ describe("theme failure handling", () => {
       expect(attributes).not.toHaveProperty("cause");
       expect(JSON.stringify(attributes)).not.toContain(cause.message);
     }
+  });
+
+  it("syncs the Ark web theme to the desktop shell as dark", async () => {
+    const setTheme = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("window", { desktopBridge: { setTheme } });
+
+    const { syncDesktopTheme } = await import("./useTheme");
+    syncDesktopTheme("ark");
+    await Promise.resolve();
+
+    expect(setTheme).toHaveBeenCalledWith("dark");
   });
 });

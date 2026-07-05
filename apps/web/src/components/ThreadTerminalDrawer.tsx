@@ -124,6 +124,7 @@ function normalizeComputedColor(value: string | null | undefined, fallback: stri
 }
 
 function terminalThemeFromApp(mountElement?: HTMLElement | null): ITheme {
+  const isArk = document.documentElement.classList.contains("ark");
   const isDark = document.documentElement.classList.contains("dark");
   const fallbackBackground = isDark ? "rgb(14, 18, 24)" : "rgb(255, 255, 255)";
   const fallbackForeground = isDark ? "rgb(237, 241, 247)" : "rgb(28, 33, 41)";
@@ -141,6 +142,34 @@ function terminalThemeFromApp(mountElement?: HTMLElement | null): ITheme {
     drawerStyles.color,
     normalizeComputedColor(bodyStyles.color, fallbackForeground),
   );
+
+  if (isArk) {
+    return {
+      background,
+      foreground,
+      cursor: "rgb(255, 197, 112)",
+      selectionBackground: "rgba(255, 179, 71, 0.28)",
+      scrollbarSliderBackground: "rgba(255, 179, 71, 0.24)",
+      scrollbarSliderHoverBackground: "rgba(255, 179, 71, 0.38)",
+      scrollbarSliderActiveBackground: "rgba(255, 179, 71, 0.48)",
+      black: "rgb(30, 18, 8)",
+      red: "rgb(255, 107, 74)",
+      green: "rgb(142, 227, 107)",
+      yellow: "rgb(255, 197, 112)",
+      blue: "rgb(120, 190, 255)",
+      magenta: "rgb(218, 154, 255)",
+      cyan: "rgb(100, 214, 255)",
+      white: "rgb(255, 225, 173)",
+      brightBlack: "rgb(145, 96, 50)",
+      brightRed: "rgb(255, 154, 127)",
+      brightGreen: "rgb(180, 242, 145)",
+      brightYellow: "rgb(255, 220, 153)",
+      brightBlue: "rgb(166, 215, 255)",
+      brightMagenta: "rgb(232, 190, 255)",
+      brightCyan: "rgb(152, 229, 255)",
+      brightWhite: "rgb(255, 243, 220)",
+    };
+  }
 
   if (isDark) {
     return {
