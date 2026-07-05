@@ -29,7 +29,7 @@ describe("ManagedTmux", () => {
     );
     assert.equal(
       buildEnsureTmuxScript("ark-codex-app", "/home/tony/app", "codex"),
-      "tmux has-session -t 'ark-codex-app' 2>/dev/null || tmux new-session -d -s 'ark-codex-app' -c '/home/tony/app' 'codex'; tmux set-option -t 'ark-codex-app' history-limit 10000",
+      "tmux has-session -t 'ark-codex-app' 2>/dev/null || { command -v 'codex' >/dev/null 2>&1 || { printf '%s\\n' 'Command not found: codex' >&2; exit 127; }; tmux new-session -d -s 'ark-codex-app' -c '/home/tony/app' 'codex'; }; tmux set-option -t 'ark-codex-app' history-limit 10000",
     );
     assert.equal(
       buildCapturePaneCommand("ark-main", 500),

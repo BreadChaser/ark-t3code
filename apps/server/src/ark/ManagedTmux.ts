@@ -112,8 +112,18 @@ export function buildEnsureTmuxScript(tmuxName: string, cwd = "~", command?: str
   const target = tmuxTarget(tmuxName);
   const startDirectory = cwd === "~" ? "~" : shellSingle(cwd);
   const sessionCommand = command?.trim();
+  const executable = sessionCommand?.split(/\s+/u)[0];
+  if (!sessionCommand) {
+    return [
+      `tmux has-session -t ${target} 2>/dev/null || tmux new-session -d -s ${target} -c ${startDirectory}`,
+      `tmux set-option -t ${target} history-limit 10000`,
+    ].join("; ");
+  }
+  const commandCheck = sessionCommand
+    ? `command -v ${shellSingle(executable ?? sessionCommand)} >/dev/null 2>&1 || { printf '%s\\n' ${shellSingle(`Command not found: ${executable ?? sessionCommand}`)} >&2; exit 127; }; `
+    : "";
   return [
-    `tmux has-session -t ${target} 2>/dev/null || tmux new-session -d -s ${target} -c ${startDirectory}${sessionCommand ? ` ${shellSingle(sessionCommand)}` : ""}`,
+    `tmux has-session -t ${target} 2>/dev/null || { ${commandCheck}tmux new-session -d -s ${target} -c ${startDirectory}${sessionCommand ? ` ${shellSingle(sessionCommand)}` : ""}; }`,
     `tmux set-option -t ${target} history-limit 10000`,
   ].join("; ");
 }
