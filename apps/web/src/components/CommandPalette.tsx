@@ -8,6 +8,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   DEFAULT_MODEL,
+  DEFAULT_RUNTIME_MODE,
   DEFAULT_SERVER_SETTINGS,
   type ArkMachine,
   type DesktopWslState,
@@ -63,6 +64,7 @@ import { desktopLocalBackendId } from "../connection/desktopLocal";
 import { arkEnvironment } from "../state/ark";
 import { filesystemEnvironment } from "../state/filesystem";
 import { projectEnvironment } from "../state/projects";
+import { threadEnvironment } from "../state/threads";
 import { useEnvironmentQuery } from "../state/query";
 import { sourceControlEnvironment } from "../state/sourceControl";
 import { useAtomCommand } from "../state/use-atom-command";
@@ -90,7 +92,7 @@ import {
 } from "../lib/projectPaths";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { getLatestThreadForProject } from "../lib/threadSort";
-import { cn, isMacPlatform, isWindowsPlatform, newProjectId } from "../lib/utils";
+import { cn, isMacPlatform, isWindowsPlatform, newProjectId, newThreadId } from "../lib/utils";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
 import {
@@ -534,6 +536,9 @@ function OpenCommandPaletteDialog(props: {
   const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
+  const createThread = useAtomCommand(threadEnvironment.create, {
+    reportFailure: false,
+  });
   const lookupRepository = useAtomQueryRunner(sourceControlEnvironment.repository, {
     reportFailure: false,
   });
@@ -608,18 +613,6 @@ function OpenCommandPaletteDialog(props: {
     return options;
   }, [environments]);
   const defaultAddProjectEnvironmentId = addProjectEnvironmentOptions[0]?.environmentId ?? null;
-  const wslAddProjectEnvironmentOption = useMemo(
-    () =>
-      addProjectEnvironmentOptions.find((option) => {
-        const environment = environments.find(
-          (candidate) => candidate.environmentId === option.environmentId,
-        );
-        return environment
-          ? desktopLocalBackendId(environment.entry.target)?.startsWith("wsl:") === true
-          : false;
-      }) ?? null,
-    [addProjectEnvironmentOptions, environments],
-  );
   const browseEnvironmentId = addProjectEnvironmentId ?? defaultAddProjectEnvironmentId;
   const browseEnvironment =
     environments.find((environment) => environment.environmentId === browseEnvironmentId) ?? null;
@@ -1048,8 +1041,39 @@ function OpenCommandPaletteDialog(props: {
         }
       }
 
+      const threadId = newThreadId();
+      const createThreadResult = await createThread({
+        environmentId,
+        input: {
+          threadId,
+          projectId,
+          title: `Codex in ${inferProjectTitleFromPath(cwd)}`,
+          modelSelection,
+          runtimeMode: DEFAULT_RUNTIME_MODE,
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: new Date().toISOString(),
+        },
+      });
+      if (createThreadResult._tag === "Failure") {
+        if (!isAtomCommandInterrupted(createThreadResult)) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to create Codex chat",
+              description: errorMessage(squashAtomCommandFailure(createThreadResult)),
+            }),
+          );
+        }
+        return;
+      }
+
       const navigationResult = await settlePromise(() =>
-        handleNewThread(scopeProjectRef(environmentId, projectId), { modelSelection }),
+        navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams(scopeThreadRef(environmentId, threadId)),
+        }),
       );
       if (navigationResult._tag === "Failure") {
         toastManager.add(
@@ -1064,7 +1088,7 @@ function OpenCommandPaletteDialog(props: {
 
       setOpen(false);
     },
-    [createProject, handleNewThread, projects, setOpen],
+    [createProject, createThread, navigate, projects, setOpen],
   );
 
   const openRemoteCodexThread = useCallback(
@@ -1187,8 +1211,10 @@ function OpenCommandPaletteDialog(props: {
                 isSelf: true,
               } satisfies Pick<ArkMachine, "hostname" | "tailscaleIp" | "isSelf">,
             ];
-      const createItems: CommandPaletteActionItem[] = machineTargets.flatMap((machine) =>
-        ARK_TMUX_MODES.map((mode) => ({
+      const createGroups: CommandPaletteView["groups"] = machineTargets.map((machine) => ({
+        value: `tmux-create:${environmentId}:${machine.isSelf ? "local" : machine.tailscaleIp}`,
+        label: arkTmuxMachineLabel(machine),
+        items: ARK_TMUX_MODES.map((mode) => ({
           kind: "action",
           value: `action:add-project:${environmentId}:tmux:create:${machine.isSelf ? "local" : machine.tailscaleIp}:${mode.mode}`,
           searchTerms: [
@@ -1216,7 +1242,7 @@ function OpenCommandPaletteDialog(props: {
             });
           },
         })),
-      );
+      }));
       const sessionItems: CommandPaletteActionItem[] = [
         ...sessions.map(
           (session): CommandPaletteActionItem => ({
@@ -1251,7 +1277,7 @@ function OpenCommandPaletteDialog(props: {
       pushPaletteView({
         addonIcon: <TerminalIcon className={ADDON_ICON_CLASS} />,
         groups: [
-          { value: `tmux-create:${environmentId}`, label: "New Ark session", items: createItems },
+          ...createGroups,
           { value: `tmux:${environmentId}`, label: "Existing tmux sessions", items: sessionItems },
         ],
         initialQuery: "",
@@ -1375,17 +1401,9 @@ function OpenCommandPaletteDialog(props: {
     (environmentId: EnvironmentId): void => {
       setAddProjectEnvironmentId(environmentId);
       setAddProjectCloneFlow(null);
-      pushPaletteView({
-        addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
-        groups: buildAddProjectSourceGroups(
-          environmentId,
-          buildAddProjectRemoteSourceReadiness(
-            browseEnvironmentId === environmentId ? sourceControlDiscovery.data : null,
-          ),
-        ),
-      });
+      void startTmuxSessionSelection(environmentId);
     },
-    [browseEnvironmentId, buildAddProjectSourceGroups, sourceControlDiscovery.data],
+    [startTmuxSessionSelection],
   );
 
   const addProjectEnvironmentItems: CommandPaletteActionItem[] = addProjectEnvironmentOptions.map(
@@ -1490,41 +1508,14 @@ function OpenCommandPaletteDialog(props: {
   actionItems.push({
     kind: "action",
     value: "action:add-project",
-    searchTerms: [
-      "add project",
-      "folder",
-      "directory",
-      "browse",
-      "clone",
-      "remote",
-      "repository",
-      "repo",
-      "git",
-      "url",
-      "environment",
-    ],
-    title: "Add project",
-    icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+    searchTerms: ["ark", "tmux", "codex", "opencode", "terminal", "session", "tailscale"],
+    title: "New Ark session",
+    icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
     keepOpen: true,
     run: async () => {
       openAddProjectFlow();
     },
   });
-
-  if (wslAddProjectEnvironmentOption) {
-    actionItems.push({
-      kind: "action",
-      value: "action:add-project:wsl-folder",
-      searchTerms: ["add project", "open", "wsl", "linux", "folder", "directory"],
-      title: "Open WSL folder",
-      description: wslAddProjectEnvironmentOption.label,
-      icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
-      keepOpen: true,
-      run: async () => {
-        startAddProjectBrowse(wslAddProjectEnvironmentOption.environmentId);
-      },
-    });
-  }
 
   actionItems.push({
     kind: "action",

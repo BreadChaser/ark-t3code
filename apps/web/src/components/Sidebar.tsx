@@ -3239,7 +3239,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 render={
                   <button
                     type="button"
-                    aria-label="Add project"
+                    aria-label="New Ark session"
                     data-testid="sidebar-add-project-trigger"
                     className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={openAddProject}
@@ -3248,7 +3248,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               >
                 <FolderPlusIcon className="size-3.5" />
               </TooltipTrigger>
-              <TooltipPopup side="right">Add project</TooltipPopup>
+              <TooltipPopup side="right">New Ark session</TooltipPopup>
             </Tooltip>
           </div>
         </div>
