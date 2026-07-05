@@ -776,10 +776,7 @@ export function TerminalViewport({
       !hasHandledExitRef.current
     ) {
       hasHandledExitRef.current = true;
-      writeSystemMessage(
-        terminal,
-        current.status === "closed" ? "Terminal closed" : "Process exited",
-      );
+      writeSystemMessage(terminal, "Completed");
       window.setTimeout(() => {
         if (hasHandledExitRef.current) {
           handleSessionExited();
