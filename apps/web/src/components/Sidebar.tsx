@@ -2876,7 +2876,8 @@ interface SidebarProjectsContentProps {
 }
 
 function arkMachineLabel(session: ArkTmuxSession): string {
-  return session.machineName ?? (session.machineIp ? session.machineIp : "This device");
+  if (session.machineSelf) return "This device";
+  return session.machineName ?? session.machineIp ?? "This device";
 }
 
 function arkSessionKey(session: ArkTmuxSession): string {
@@ -2895,13 +2896,25 @@ interface ArkMachineProjectGroup {
   readonly projects: readonly SidebarProjectSnapshot[];
 }
 
+interface ArkMachineSidebarGroup {
+  readonly key: string;
+  readonly label: string;
+  readonly projects: readonly SidebarProjectSnapshot[];
+  readonly sessions: readonly ArkTmuxSession[];
+}
+
+function machineGroupKey(label: string): string {
+  return label.trim().toLowerCase();
+}
+
 function groupArkSessionsByMachine(
   sessions: readonly ArkTmuxSession[],
 ): readonly ArkMachineSessionGroup[] {
   const groups = new Map<string, { label: string; sessions: ArkTmuxSession[] }>();
   for (const session of sessions) {
-    const key = session.machineIp ?? session.machineId ?? "local";
-    const group = groups.get(key) ?? { label: arkMachineLabel(session), sessions: [] };
+    const label = arkMachineLabel(session);
+    const key = machineGroupKey(label);
+    const group = groups.get(key) ?? { label, sessions: [] };
     group.sessions.push(session);
     groups.set(key, group);
   }
@@ -2959,7 +2972,7 @@ function groupProjectsByMachine(
   const groups = new Map<string, { label: string; projects: SidebarProjectSnapshot[] }>();
   for (const project of projects) {
     const label = projectMachineLabel(project, serverConfigs, threads);
-    const key = label.toLowerCase();
+    const key = machineGroupKey(label);
     const group = groups.get(key) ?? { label, projects: [] };
     group.projects.push(project);
     groups.set(key, group);
@@ -2971,170 +2984,30 @@ function groupProjectsByMachine(
   }));
 }
 
-function ArkSidebarSessions() {
-  const navigate = useNavigate();
-  const { environments } = useEnvironments();
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const environmentId = primaryEnvironmentId ?? environments[0]?.environmentId ?? null;
-  const listTmuxSessions = useAtomCommand(arkEnvironment.listTmuxSessions, {
-    reportFailure: false,
-  });
-  const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, { reportFailure: false });
-  const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
-  const [isArkExpanded, setIsArkExpanded] = useState(true);
-  const [expandedMachines, setExpandedMachines] = useState<ReadonlySet<string>>(
-    () => new Set(["local"]),
-  );
-
-  const refresh = useCallback(async () => {
-    if (environmentId === null) return;
-    const result = await listTmuxSessions({ environmentId, input: {} });
-    if (result._tag === "Success") {
-      setSessions(
-        [...result.value.sessions].sort((a, b) => {
-          if (a.machineSelf !== b.machineSelf) return a.machineSelf ? -1 : 1;
-          const machineSort = arkMachineLabel(a).localeCompare(arkMachineLabel(b));
-          return machineSort === 0 ? a.name.localeCompare(b.name) : machineSort;
-        }),
-      );
-    }
-  }, [environmentId, listTmuxSessions]);
-
-  useEffect(() => {
-    void refresh();
-    const timers = [
-      window.setTimeout(() => void refresh(), 3000),
-      window.setTimeout(() => void refresh(), 9000),
-    ];
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [refresh]);
-
-  const openSession = useCallback(
-    async (session: ArkTmuxSession) => {
-      if (environmentId === null) return;
-      await ensureTmux({
-        environmentId,
-        input: { name: session.name, machineIp: session.machineIp },
-      });
-      await navigate({ to: "/" });
-      window.dispatchEvent(new CustomEvent(ARK_OPEN_SESSION_EVENT, { detail: session }));
-    },
-    [ensureTmux, environmentId, navigate],
-  );
-  const machineGroups = useMemo(() => groupArkSessionsByMachine(sessions), [sessions]);
-
-  useEffect(() => {
-    if (machineGroups.length === 0) return;
-    setExpandedMachines((current) => {
-      const next = new Set(current);
-      for (const group of machineGroups) {
-        if (group.sessions.some((session) => session.machineSelf)) next.add(group.key);
-      }
-      if (next.size === 0) next.add(machineGroups[0]!.key);
-      return next;
-    });
-  }, [machineGroups]);
-
-  const toggleMachine = useCallback((key: string) => {
-    setExpandedMachines((current) => {
-      const next = new Set(current);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }, []);
-
-  return (
-    <div className="mb-2">
-      <div className="mb-1 flex items-center justify-between">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-medium text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-          onClick={() => setIsArkExpanded((current) => !current)}
-        >
-          <ChevronRightIcon
-            className={cn("size-3.5 shrink-0 transition-transform", isArkExpanded && "rotate-90")}
-          />
-          <TerminalIcon className="size-3.5 shrink-0" />
-          <span className="truncate">Ark tmux</span>
-        </button>
-        <button
-          type="button"
-          aria-label="Refresh Ark sessions"
-          className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-          onClick={() => void refresh()}
-        >
-          <LoaderIcon className="size-3.5" />
-        </button>
-      </div>
-      {isArkExpanded ? (
-        <div className="space-y-1 pl-2">
-          {sessions.length === 0 ? (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-              onClick={() =>
-                void openSession({
-                  name: "ark-main",
-                  windows: null,
-                  attached: null,
-                  created: null,
-                  ark: true,
-                })
-              }
-            >
-              <TerminalIcon className="size-3.5 shrink-0" />
-              <span className="truncate">Open ark-main</span>
-            </button>
-          ) : (
-            machineGroups.map((group) => {
-              const isMachineExpanded = expandedMachines.has(group.key);
-              return (
-                <div key={group.key}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-[11px] font-medium text-muted-foreground/75 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={() => toggleMachine(group.key)}
-                  >
-                    <ChevronRightIcon
-                      className={cn(
-                        "size-3 shrink-0 transition-transform",
-                        isMachineExpanded && "rotate-90",
-                      )}
-                    />
-                    <span className="truncate">{group.label}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground/55">
-                      {group.sessions.length}
-                    </span>
-                  </button>
-                  {isMachineExpanded ? (
-                    <div className="mt-0.5 space-y-0.5 pl-4">
-                      {group.sessions.map((session) => (
-                        <button
-                          key={arkSessionKey(session)}
-                          type="button"
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
-                          onClick={() => void openSession(session)}
-                        >
-                          <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                          <span className="min-w-0 flex-1 truncate font-medium">
-                            {session.name}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
+function groupArkSidebarItems(input: {
+  readonly projectGroups: readonly ArkMachineProjectGroup[];
+  readonly sessionGroups: readonly ArkMachineSessionGroup[];
+}): readonly ArkMachineSidebarGroup[] {
+  const groups = new Map<
+    string,
+    { label: string; projects: SidebarProjectSnapshot[]; sessions: ArkTmuxSession[] }
+  >();
+  for (const group of input.projectGroups) {
+    const existing = groups.get(group.key) ?? { label: group.label, projects: [], sessions: [] };
+    existing.projects.push(...group.projects);
+    groups.set(group.key, existing);
+  }
+  for (const group of input.sessionGroups) {
+    const existing = groups.get(group.key) ?? { label: group.label, projects: [], sessions: [] };
+    existing.sessions.push(...group.sessions);
+    groups.set(group.key, existing);
+  }
+  return [...groups.entries()].map(([key, group]) => ({
+    key,
+    label: group.label,
+    projects: group.projects,
+    sessions: group.sessions,
+  }));
 }
 
 const SidebarProjectsContent = memo(function SidebarProjectsContent(
@@ -3177,12 +3050,88 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     attachProjectListAutoAnimateRef,
     projectsLength,
   } = props;
+  const navigate = useNavigate();
+  const { environments } = useEnvironments();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const environmentId = primaryEnvironmentId ?? environments[0]?.environmentId ?? null;
   const serverConfigs = useServerConfigs();
   const sidebarThreads = useThreadShells();
+  const listTmuxSessions = useAtomCommand(arkEnvironment.listTmuxSessions, {
+    reportFailure: false,
+  });
+  const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, { reportFailure: false });
+  const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
+  const [expandedMachines, setExpandedMachines] = useState<ReadonlySet<string>>(() => new Set());
   const projectMachineGroups = useMemo(
     () => groupProjectsByMachine(sortedProjects, serverConfigs, sidebarThreads),
     [serverConfigs, sidebarThreads, sortedProjects],
   );
+  const sessionMachineGroups = useMemo(() => groupArkSessionsByMachine(sessions), [sessions]);
+  const arkMachineGroups = useMemo(
+    () =>
+      groupArkSidebarItems({
+        projectGroups: projectMachineGroups,
+        sessionGroups: sessionMachineGroups,
+      }),
+    [projectMachineGroups, sessionMachineGroups],
+  );
+
+  const refreshArkSessions = useCallback(async () => {
+    if (environmentId === null) return;
+    const result = await listTmuxSessions({ environmentId, input: {} });
+    if (result._tag === "Success") {
+      setSessions(
+        [...result.value.sessions].sort((a, b) => {
+          if (a.machineSelf !== b.machineSelf) return a.machineSelf ? -1 : 1;
+          const machineSort = arkMachineLabel(a).localeCompare(arkMachineLabel(b));
+          return machineSort === 0 ? a.name.localeCompare(b.name) : machineSort;
+        }),
+      );
+    }
+  }, [environmentId, listTmuxSessions]);
+
+  useEffect(() => {
+    void refreshArkSessions();
+    const timers = [
+      window.setTimeout(() => void refreshArkSessions(), 3000),
+      window.setTimeout(() => void refreshArkSessions(), 9000),
+    ];
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [refreshArkSessions]);
+
+  useEffect(() => {
+    if (arkMachineGroups.length === 0) return;
+    setExpandedMachines((current) => {
+      const next = new Set(current);
+      for (const group of arkMachineGroups) next.add(group.key);
+      return next;
+    });
+  }, [arkMachineGroups]);
+
+  const openSession = useCallback(
+    async (session: ArkTmuxSession) => {
+      if (environmentId === null) return;
+      await ensureTmux({
+        environmentId,
+        input: { name: session.name, machineIp: session.machineIp },
+      });
+      await navigate({ to: "/" });
+      window.dispatchEvent(new CustomEvent(ARK_OPEN_SESSION_EVENT, { detail: session }));
+    },
+    [ensureTmux, environmentId, navigate],
+  );
+
+  const toggleMachine = useCallback((key: string) => {
+    setExpandedMachines((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   const handleProjectSortOrderChange = useCallback(
     (sortOrder: SidebarProjectSortOrder) => {
@@ -3292,7 +3241,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             </Tooltip>
           </div>
         </div>
-        <ArkSidebarSessions />
 
         {isManualProjectSorting ? (
           <DndContext
@@ -3308,41 +3256,89 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 items={sortedProjects.map((project) => project.projectKey)}
                 strategy={verticalListSortingStrategy}
               >
-                {projectMachineGroups.map((group) => (
+                {arkMachineGroups.map((group) => (
                   <React.Fragment key={group.key}>
-                    <SidebarMenuItem className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/55 first:pt-0">
-                      {group.label}
+                    <SidebarMenuItem className="pt-2 first:pt-0">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground/65 transition-colors hover:bg-accent hover:text-foreground"
+                        onClick={() => toggleMachine(group.key)}
+                      >
+                        <ChevronRightIcon
+                          className={cn(
+                            "size-3 shrink-0 transition-transform",
+                            expandedMachines.has(group.key) && "rotate-90",
+                          )}
+                        />
+                        <span className="truncate">{group.label}</span>
+                        <span className="ml-auto text-[10px] text-muted-foreground/55">
+                          {group.projects.length + group.sessions.length}
+                        </span>
+                      </button>
                     </SidebarMenuItem>
-                    {group.projects.map((project) => (
-                      <SortableProjectItem key={project.projectKey} projectId={project.projectKey}>
-                        {(dragHandleProps) => (
-                          <SidebarProjectItem
-                            project={project}
-                            isThreadListExpanded={expandedThreadListsByProject.has(
-                              project.projectKey,
+                    {expandedMachines.has(group.key) ? (
+                      <>
+                        {group.projects.length > 0 ? (
+                          <SidebarMenuItem className="px-6 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45">
+                            Chats
+                          </SidebarMenuItem>
+                        ) : null}
+                        {group.projects.map((project) => (
+                          <SortableProjectItem
+                            key={project.projectKey}
+                            projectId={project.projectKey}
+                          >
+                            {(dragHandleProps) => (
+                              <SidebarProjectItem
+                                project={project}
+                                isThreadListExpanded={expandedThreadListsByProject.has(
+                                  project.projectKey,
+                                )}
+                                activeRouteThreadKey={
+                                  activeRouteProjectKey === project.projectKey
+                                    ? routeThreadKey
+                                    : null
+                                }
+                                newThreadShortcutLabel={newThreadShortcutLabel}
+                                handleNewThread={handleNewThread}
+                                archiveThread={archiveThread}
+                                deleteThread={deleteThread}
+                                threadJumpLabelByKey={threadJumpLabelByKey}
+                                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                                expandThreadListForProject={expandThreadListForProject}
+                                collapseThreadListForProject={collapseThreadListForProject}
+                                dragInProgressRef={dragInProgressRef}
+                                suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                                suppressProjectClickForContextMenuRef={
+                                  suppressProjectClickForContextMenuRef
+                                }
+                                isManualProjectSorting={isManualProjectSorting}
+                                dragHandleProps={dragHandleProps}
+                              />
                             )}
-                            activeRouteThreadKey={
-                              activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                            }
-                            newThreadShortcutLabel={newThreadShortcutLabel}
-                            handleNewThread={handleNewThread}
-                            archiveThread={archiveThread}
-                            deleteThread={deleteThread}
-                            threadJumpLabelByKey={threadJumpLabelByKey}
-                            attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                            expandThreadListForProject={expandThreadListForProject}
-                            collapseThreadListForProject={collapseThreadListForProject}
-                            dragInProgressRef={dragInProgressRef}
-                            suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                            suppressProjectClickForContextMenuRef={
-                              suppressProjectClickForContextMenuRef
-                            }
-                            isManualProjectSorting={isManualProjectSorting}
-                            dragHandleProps={dragHandleProps}
-                          />
-                        )}
-                      </SortableProjectItem>
-                    ))}
+                          </SortableProjectItem>
+                        ))}
+                        {group.sessions.length > 0 ? (
+                          <SidebarMenuItem className="px-6 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45">
+                            Terminals
+                          </SidebarMenuItem>
+                        ) : null}
+                        {group.sessions.map((session) => (
+                          <SidebarMenuItem key={arkSessionKey(session)}>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
+                              onClick={() => void openSession(session)}
+                            >
+                              <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                              <span className="min-w-0 flex-1 truncate font-medium">
+                                {session.name}
+                              </span>
+                            </button>
+                          </SidebarMenuItem>
+                        ))}
+                      </>
+                    ) : null}
                   </React.Fragment>
                 ))}
               </SortableContext>
@@ -3350,34 +3346,79 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </DndContext>
         ) : (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-            {projectMachineGroups.map((group) => (
+            {arkMachineGroups.map((group) => (
               <React.Fragment key={group.key}>
-                <SidebarMenuItem className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/55 first:pt-0">
-                  {group.label}
+                <SidebarMenuItem className="pt-2 first:pt-0">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground/65 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={() => toggleMachine(group.key)}
+                  >
+                    <ChevronRightIcon
+                      className={cn(
+                        "size-3 shrink-0 transition-transform",
+                        expandedMachines.has(group.key) && "rotate-90",
+                      )}
+                    />
+                    <span className="truncate">{group.label}</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground/55">
+                      {group.projects.length + group.sessions.length}
+                    </span>
+                  </button>
                 </SidebarMenuItem>
-                {group.projects.map((project) => (
-                  <SidebarProjectListRow
-                    key={project.projectKey}
-                    project={project}
-                    isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                    activeRouteThreadKey={
-                      activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                    }
-                    newThreadShortcutLabel={newThreadShortcutLabel}
-                    handleNewThread={handleNewThread}
-                    archiveThread={archiveThread}
-                    deleteThread={deleteThread}
-                    threadJumpLabelByKey={threadJumpLabelByKey}
-                    attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                    expandThreadListForProject={expandThreadListForProject}
-                    collapseThreadListForProject={collapseThreadListForProject}
-                    dragInProgressRef={dragInProgressRef}
-                    suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                    suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
-                    isManualProjectSorting={isManualProjectSorting}
-                    dragHandleProps={null}
-                  />
-                ))}
+                {expandedMachines.has(group.key) ? (
+                  <>
+                    {group.projects.length > 0 ? (
+                      <SidebarMenuItem className="px-6 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45">
+                        Chats
+                      </SidebarMenuItem>
+                    ) : null}
+                    {group.projects.map((project) => (
+                      <SidebarProjectListRow
+                        key={project.projectKey}
+                        project={project}
+                        isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                        activeRouteThreadKey={
+                          activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                        }
+                        newThreadShortcutLabel={newThreadShortcutLabel}
+                        handleNewThread={handleNewThread}
+                        archiveThread={archiveThread}
+                        deleteThread={deleteThread}
+                        threadJumpLabelByKey={threadJumpLabelByKey}
+                        attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                        expandThreadListForProject={expandThreadListForProject}
+                        collapseThreadListForProject={collapseThreadListForProject}
+                        dragInProgressRef={dragInProgressRef}
+                        suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                        suppressProjectClickForContextMenuRef={
+                          suppressProjectClickForContextMenuRef
+                        }
+                        isManualProjectSorting={isManualProjectSorting}
+                        dragHandleProps={null}
+                      />
+                    ))}
+                    {group.sessions.length > 0 ? (
+                      <SidebarMenuItem className="px-6 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45">
+                        Terminals
+                      </SidebarMenuItem>
+                    ) : null}
+                    {group.sessions.map((session) => (
+                      <SidebarMenuItem key={arkSessionKey(session)}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
+                          onClick={() => void openSession(session)}
+                        >
+                          <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                          <span className="min-w-0 flex-1 truncate font-medium">
+                            {session.name}
+                          </span>
+                        </button>
+                      </SidebarMenuItem>
+                    ))}
+                  </>
+                ) : null}
               </React.Fragment>
             ))}
           </SidebarMenu>
