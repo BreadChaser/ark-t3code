@@ -964,12 +964,77 @@ function OpenCommandPaletteDialog(props: {
     [getAddProjectInitialQueryForEnvironment],
   );
 
+  const openLocalCodexThread = useCallback(
+    async (environmentId: EnvironmentId, rawCwd: string): Promise<void> => {
+      const cwd = resolveProjectPathForDispatch(rawCwd, null);
+      if (cwd.length === 0) return;
+
+      const modelSelection = {
+        instanceId: ProviderInstanceId.make("codex"),
+        model: DEFAULT_MODEL,
+      };
+      const existing = findProjectByPath(
+        projects.filter((project) => project.environmentId === environmentId),
+        cwd,
+      );
+      const projectId = existing?.id ?? newProjectId();
+
+      if (!existing) {
+        const createResult = await createProject({
+          environmentId,
+          input: {
+            projectId,
+            title: inferProjectTitleFromPath(cwd),
+            workspaceRoot: cwd,
+            createWorkspaceRootIfMissing: true,
+            defaultModelSelection: modelSelection,
+          },
+        });
+        if (createResult._tag === "Failure") {
+          if (!isAtomCommandInterrupted(createResult)) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Failed to create Codex project",
+                description: errorMessage(squashAtomCommandFailure(createResult)),
+              }),
+            );
+          }
+          return;
+        }
+      }
+
+      const navigationResult = await settlePromise(() =>
+        handleNewThread(scopeProjectRef(environmentId, projectId), { modelSelection }),
+      );
+      if (navigationResult._tag === "Failure") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to open Codex chat",
+            description: errorMessage(squashAtomCommandFailure(navigationResult)),
+          }),
+        );
+        return;
+      }
+
+      setOpen(false);
+    },
+    [createProject, handleNewThread, projects, setOpen],
+  );
+
   const submitArkTmuxFlow = useCallback(
     async (cwd: string): Promise<void> => {
       if (arkTmuxFlow === null) return;
       const mode = ARK_TMUX_MODES.find((candidate) => candidate.mode === arkTmuxFlow.mode);
       const trimmedCwd = cwd.trim();
       if (!mode || trimmedCwd.length === 0) return;
+
+      if (mode.mode === "codex" && arkTmuxFlow.machineIp === undefined) {
+        await openLocalCodexThread(arkTmuxFlow.environmentId, trimmedCwd);
+        setArkTmuxFlow(null);
+        return;
+      }
 
       await ensureTmuxSession({
         environmentId: arkTmuxFlow.environmentId,
@@ -981,7 +1046,7 @@ function OpenCommandPaletteDialog(props: {
       });
       setArkTmuxFlow(null);
     },
-    [arkTmuxFlow, ensureTmuxSession],
+    [arkTmuxFlow, ensureTmuxSession, openLocalCodexThread],
   );
 
   const startTmuxSessionSelection = useCallback(
@@ -1034,7 +1099,10 @@ function OpenCommandPaletteDialog(props: {
             machine.hostname,
           ],
           title: `${mode.label} on ${arkTmuxMachineLabel(machine)}`,
-          description: "Pick a folder, then open Ark",
+          description:
+            mode.mode === "codex" && machine.isSelf
+              ? "Pick a folder, then open T3 chat"
+              : "Pick a folder, then open Ark",
           icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
           keepOpen: true,
           run: async () => {
