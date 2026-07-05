@@ -45,9 +45,11 @@ import {
   type ArkTmuxSession,
   type ContextMenuItem,
   DEFAULT_SERVER_SETTINGS,
+  type EnvironmentId,
   ProjectId,
   type ScopedThreadRef,
   type ResolvedKeybindingsConfig,
+  type ServerConfig,
   type SidebarProjectGroupingMode,
   ThreadId,
 } from "@t3tools/contracts";
@@ -2887,6 +2889,12 @@ interface ArkMachineSessionGroup {
   readonly sessions: readonly ArkTmuxSession[];
 }
 
+interface ArkMachineProjectGroup {
+  readonly key: string;
+  readonly label: string;
+  readonly projects: readonly SidebarProjectSnapshot[];
+}
+
 function groupArkSessionsByMachine(
   sessions: readonly ArkTmuxSession[],
 ): readonly ArkMachineSessionGroup[] {
@@ -2901,6 +2909,65 @@ function groupArkSessionsByMachine(
     key,
     label: group.label,
     sessions: group.sessions,
+  }));
+}
+
+function providerMachineLabel(instanceId: string, displayName?: string): string {
+  if (displayName?.trim()) {
+    return displayName.trim().replace(/^(Codex|OpenCode|Terminal) on\s+/iu, "");
+  }
+  if (instanceId === "codex") return "This device";
+  return instanceId;
+}
+
+function projectMachineLabel(
+  project: SidebarProjectSnapshot,
+  serverConfigs: ReadonlyMap<EnvironmentId, ServerConfig>,
+  threads: readonly SidebarThreadSummary[],
+): string {
+  const labels = new Set<string>();
+  for (const member of project.memberProjects) {
+    const memberThreads = threads.filter(
+      (thread) => thread.environmentId === member.environmentId && thread.projectId === member.id,
+    );
+    const instanceIds =
+      memberThreads.length > 0
+        ? memberThreads.map((thread) => thread.modelSelection.instanceId)
+        : [member.defaultModelSelection?.instanceId];
+    for (const instanceId of instanceIds) {
+      if (!instanceId) {
+        labels.add("This device");
+        continue;
+      }
+      const settings = serverConfigs.get(member.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
+      labels.add(
+        providerMachineLabel(
+          String(instanceId),
+          settings.providerInstances[instanceId]?.displayName,
+        ),
+      );
+    }
+  }
+  return labels.size === 1 ? [...labels][0]! : "Mixed machines";
+}
+
+function groupProjectsByMachine(
+  projects: readonly SidebarProjectSnapshot[],
+  serverConfigs: ReadonlyMap<EnvironmentId, ServerConfig>,
+  threads: readonly SidebarThreadSummary[],
+): readonly ArkMachineProjectGroup[] {
+  const groups = new Map<string, { label: string; projects: SidebarProjectSnapshot[] }>();
+  for (const project of projects) {
+    const label = projectMachineLabel(project, serverConfigs, threads);
+    const key = label.toLowerCase();
+    const group = groups.get(key) ?? { label, projects: [] };
+    group.projects.push(project);
+    groups.set(key, group);
+  }
+  return [...groups.entries()].map(([key, group]) => ({
+    key,
+    label: group.label,
+    projects: group.projects,
   }));
 }
 
@@ -3110,6 +3177,12 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     attachProjectListAutoAnimateRef,
     projectsLength,
   } = props;
+  const serverConfigs = useServerConfigs();
+  const sidebarThreads = useThreadShells();
+  const projectMachineGroups = useMemo(
+    () => groupProjectsByMachine(sortedProjects, serverConfigs, sidebarThreads),
+    [serverConfigs, sidebarThreads, sortedProjects],
+  );
 
   const handleProjectSortOrderChange = useCallback(
     (sortOrder: SidebarProjectSortOrder) => {
@@ -3188,7 +3261,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       <SidebarGroup className="px-2 py-2">
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            Projects
+            Ark
           </span>
           <div className="flex items-center gap-1">
             <ProjectSortMenu
@@ -3235,61 +3308,77 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 items={sortedProjects.map((project) => project.projectKey)}
                 strategy={verticalListSortingStrategy}
               >
-                {sortedProjects.map((project) => (
-                  <SortableProjectItem key={project.projectKey} projectId={project.projectKey}>
-                    {(dragHandleProps) => (
-                      <SidebarProjectItem
-                        project={project}
-                        isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                        activeRouteThreadKey={
-                          activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                        }
-                        newThreadShortcutLabel={newThreadShortcutLabel}
-                        handleNewThread={handleNewThread}
-                        archiveThread={archiveThread}
-                        deleteThread={deleteThread}
-                        threadJumpLabelByKey={threadJumpLabelByKey}
-                        attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                        expandThreadListForProject={expandThreadListForProject}
-                        collapseThreadListForProject={collapseThreadListForProject}
-                        dragInProgressRef={dragInProgressRef}
-                        suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                        suppressProjectClickForContextMenuRef={
-                          suppressProjectClickForContextMenuRef
-                        }
-                        isManualProjectSorting={isManualProjectSorting}
-                        dragHandleProps={dragHandleProps}
-                      />
-                    )}
-                  </SortableProjectItem>
+                {projectMachineGroups.map((group) => (
+                  <React.Fragment key={group.key}>
+                    <SidebarMenuItem className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/55 first:pt-0">
+                      {group.label}
+                    </SidebarMenuItem>
+                    {group.projects.map((project) => (
+                      <SortableProjectItem key={project.projectKey} projectId={project.projectKey}>
+                        {(dragHandleProps) => (
+                          <SidebarProjectItem
+                            project={project}
+                            isThreadListExpanded={expandedThreadListsByProject.has(
+                              project.projectKey,
+                            )}
+                            activeRouteThreadKey={
+                              activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                            }
+                            newThreadShortcutLabel={newThreadShortcutLabel}
+                            handleNewThread={handleNewThread}
+                            archiveThread={archiveThread}
+                            deleteThread={deleteThread}
+                            threadJumpLabelByKey={threadJumpLabelByKey}
+                            attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                            expandThreadListForProject={expandThreadListForProject}
+                            collapseThreadListForProject={collapseThreadListForProject}
+                            dragInProgressRef={dragInProgressRef}
+                            suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                            suppressProjectClickForContextMenuRef={
+                              suppressProjectClickForContextMenuRef
+                            }
+                            isManualProjectSorting={isManualProjectSorting}
+                            dragHandleProps={dragHandleProps}
+                          />
+                        )}
+                      </SortableProjectItem>
+                    ))}
+                  </React.Fragment>
                 ))}
               </SortableContext>
             </SidebarMenu>
           </DndContext>
         ) : (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-            {sortedProjects.map((project) => (
-              <SidebarProjectListRow
-                key={project.projectKey}
-                project={project}
-                isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                activeRouteThreadKey={
-                  activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                }
-                newThreadShortcutLabel={newThreadShortcutLabel}
-                handleNewThread={handleNewThread}
-                archiveThread={archiveThread}
-                deleteThread={deleteThread}
-                threadJumpLabelByKey={threadJumpLabelByKey}
-                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                expandThreadListForProject={expandThreadListForProject}
-                collapseThreadListForProject={collapseThreadListForProject}
-                dragInProgressRef={dragInProgressRef}
-                suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
-                isManualProjectSorting={isManualProjectSorting}
-                dragHandleProps={null}
-              />
+            {projectMachineGroups.map((group) => (
+              <React.Fragment key={group.key}>
+                <SidebarMenuItem className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/55 first:pt-0">
+                  {group.label}
+                </SidebarMenuItem>
+                {group.projects.map((project) => (
+                  <SidebarProjectListRow
+                    key={project.projectKey}
+                    project={project}
+                    isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                    activeRouteThreadKey={
+                      activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                    }
+                    newThreadShortcutLabel={newThreadShortcutLabel}
+                    handleNewThread={handleNewThread}
+                    archiveThread={archiveThread}
+                    deleteThread={deleteThread}
+                    threadJumpLabelByKey={threadJumpLabelByKey}
+                    attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                    expandThreadListForProject={expandThreadListForProject}
+                    collapseThreadListForProject={collapseThreadListForProject}
+                    dragInProgressRef={dragInProgressRef}
+                    suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                    suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+                    isManualProjectSorting={isManualProjectSorting}
+                    dragHandleProps={null}
+                  />
+                ))}
+              </React.Fragment>
             ))}
           </SidebarMenu>
         )}
