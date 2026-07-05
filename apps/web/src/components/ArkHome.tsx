@@ -1,8 +1,19 @@
-import type { ArkTmuxSession, EnvironmentId } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import {
+  defaultInstanceIdForDriver,
+  type ArkTmuxSession,
+  type EnvironmentId,
+  ProviderDriverKind,
+} from "@t3tools/contracts";
+import { createModelSelection } from "@t3tools/shared/model";
 import { ImageIcon, RefreshCwIcon, SendIcon, SquareIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useOpenAddProjectCommandPalette } from "../commandPaletteContext";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { getDefaultServerModel } from "../providerModels";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
+import { primaryServerProvidersAtom } from "~/state/server";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { arkEnvironment } from "../state/ark";
@@ -10,6 +21,8 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
 const DEFAULT_SESSION = "ark-main";
+const CODEX_PROVIDER = ProviderDriverKind.make("codex");
+const OPENCODE_PROVIDER = ProviderDriverKind.make("opencode");
 export const ARK_OPEN_SESSION_EVENT = "ark:open-session";
 
 type ArkSessionTarget = Pick<ArkTmuxSession, "name" | "machineIp" | "machineName">;
@@ -50,6 +63,9 @@ function randomLocalId(): string {
 export function ArkHome() {
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const providers = useAtomValue(primaryServerProvidersAtom);
+  const openAddProject = useOpenAddProjectCommandPalette();
+  const { defaultProjectRef, handleNewThread } = useHandleNewThread();
   const environmentId = useMemo<EnvironmentId | null>(
     () => primaryEnvironmentId ?? environments[0]?.environmentId ?? null,
     [environments, primaryEnvironmentId],
@@ -154,6 +170,31 @@ export function ArkHome() {
       await captureSelected(session);
     },
     [captureSelected, ensureTmux, environmentId, refreshSessions],
+  );
+
+  const openAgentChat = useCallback(
+    async (provider: typeof CODEX_PROVIDER | typeof OPENCODE_PROVIDER) => {
+      if (defaultProjectRef === null) {
+        openAddProject();
+        return;
+      }
+
+      setIsBusy(true);
+      try {
+        await handleNewThread(defaultProjectRef, {
+          modelSelection: createModelSelection(
+            defaultInstanceIdForDriver(provider),
+            getDefaultServerModel(providers, provider),
+          ),
+        });
+        setError(null);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Could not open agent chat.");
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [defaultProjectRef, handleNewThread, openAddProject, providers],
   );
 
   const sendDraft = useCallback(async () => {
@@ -310,6 +351,22 @@ export function ArkHome() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void openAgentChat(CODEX_PROVIDER)}
+                disabled={isBusy}
+              >
+                Codex
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void openAgentChat(OPENCODE_PROVIDER)}
+                disabled={isBusy}
+              >
+                OpenCode
+              </Button>
               <Button size="sm" variant="outline" onClick={() => void refreshSessions(true)}>
                 <RefreshCwIcon />
                 Refresh

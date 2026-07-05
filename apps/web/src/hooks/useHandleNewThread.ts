@@ -6,6 +6,7 @@ import {
 import {
   DEFAULT_RUNTIME_MODE,
   DEFAULT_SERVER_SETTINGS,
+  type ModelSelection,
   type ScopedProjectRef,
 } from "@t3tools/contracts";
 import { useParams, useRouter } from "@tanstack/react-router";
@@ -47,6 +48,7 @@ export function useNewThreadHandler() {
         worktreePath?: string | null;
         envMode?: DraftThreadEnvMode;
         startFromOrigin?: boolean;
+        modelSelection?: ModelSelection;
       },
     ): Promise<void> => {
       const {
@@ -56,6 +58,7 @@ export function useNewThreadHandler() {
         applyStickyState,
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
+        setModelSelection,
       } = useComposerDraftStore.getState();
       const currentRouteTarget = getCurrentRouteTarget();
       const project = projects.find(
@@ -72,6 +75,7 @@ export function useNewThreadHandler() {
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
       const hasStartFromOriginOption = options?.startFromOrigin !== undefined;
+      const hasModelSelectionOption = options?.modelSelection !== undefined;
       const storedDraftThread = getDraftSessionByLogicalProjectKey(logicalProjectKey);
       const storedDraftThreadRef = storedDraftThread
         ? scopeThreadRef(storedDraftThread.environmentId, storedDraftThread.threadId)
@@ -102,6 +106,9 @@ export function useNewThreadHandler() {
               ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
               ...(hasStartFromOriginOption ? { startFromOrigin: options?.startFromOrigin } : {}),
             });
+          }
+          if (hasModelSelectionOption) {
+            setModelSelection(reusableStoredDraftThread.draftId, options?.modelSelection);
           }
           setLogicalProjectDraftThreadId(
             logicalProjectKey,
@@ -153,6 +160,9 @@ export function useNewThreadHandler() {
           ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
           ...(hasStartFromOriginOption ? { startFromOrigin: options?.startFromOrigin } : {}),
         });
+        if (hasModelSelectionOption) {
+          setModelSelection(currentRouteTarget.draftId, options?.modelSelection);
+        }
         return Promise.resolve();
       }
 
@@ -176,6 +186,9 @@ export function useNewThreadHandler() {
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
         applyStickyState(draftId);
+        if (hasModelSelectionOption) {
+          setModelSelection(draftId, options?.modelSelection);
+        }
 
         await router.navigate({
           to: "/draft/$draftId",
