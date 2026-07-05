@@ -263,19 +263,8 @@ type AddProjectCloneFlow =
       readonly remoteUrl: string;
     };
 
-const REMOTE_PROJECT_SOURCES: ReadonlyArray<AddProjectRemoteSource> = [
-  "url",
-  "github",
-  "gitlab",
-  "bitbucket",
-  "azure-devops",
-];
-const REMOTE_PROJECT_PROVIDER_SOURCES: ReadonlyArray<AddProjectRemoteProviderKind> = [
-  "github",
-  "gitlab",
-  "bitbucket",
-  "azure-devops",
-];
+const REMOTE_PROJECT_SOURCES: ReadonlyArray<AddProjectRemoteSource> = ["url"];
+const REMOTE_PROJECT_PROVIDER_SOURCES: ReadonlyArray<AddProjectRemoteProviderKind> = [];
 
 function remoteProjectSourceLabel(source: AddProjectRemoteSource): string {
   switch (source) {
@@ -1511,11 +1500,6 @@ function OpenCommandPaletteDialog(props: {
       "repository",
       "repo",
       "git",
-      "github",
-      "gitlab",
-      "bitbucket",
-      "azure",
-      "devops",
       "url",
       "environment",
     ],
