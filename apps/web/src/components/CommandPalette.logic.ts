@@ -58,13 +58,14 @@ export function filterBrowseEntries(input: {
   browseEntries: ReadonlyArray<FilesystemBrowseEntry>;
   browseFilterQuery: string;
   highlightedItemValue: string | null;
+  showHidden?: boolean;
 }): {
   filteredEntries: FilesystemBrowseEntry[];
   highlightedEntry: FilesystemBrowseEntry | null;
   exactEntry: FilesystemBrowseEntry | null;
 } {
   const lowerFilter = input.browseFilterQuery.toLowerCase();
-  const showHidden = input.browseFilterQuery.startsWith(".");
+  const showHidden = input.showHidden === true || input.browseFilterQuery.startsWith(".");
 
   const filteredEntries = input.browseEntries.filter(
     (entry) =>

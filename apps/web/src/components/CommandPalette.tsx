@@ -186,7 +186,7 @@ const ARK_TMUX_MODES: ReadonlyArray<{
 ];
 
 function arkTmuxMachineLabel(machine: Pick<ArkMachine, "hostname" | "tailscaleIp" | "isSelf">) {
-  return machine.isSelf ? "This device" : machine.hostname || machine.tailscaleIp;
+  return machine.hostname || (machine.isSelf ? "This device" : machine.tailscaleIp);
 }
 
 function arkTmuxSessionName(mode: ArkTmuxMode, cwd: string): string {
@@ -662,12 +662,15 @@ function OpenCommandPaletteDialog(props: {
       ? currentProjectCwd
       : null;
   const relativePathNeedsActiveProject =
-    isExplicitRelativeProjectPath(query.trim()) && currentProjectCwdForBrowse === null;
+    arkTmuxFlow === null &&
+    isExplicitRelativeProjectPath(query.trim()) &&
+    currentProjectCwdForBrowse === null;
   const browseDirectoryPath = isBrowsing ? getBrowseDirectoryPath(query) : "";
   const browseFilterQuery =
     isBrowsing && !hasTrailingPathSeparator(query) ? getBrowseLeafPathSegment(query) : "";
-  const browseQuery = useEnvironmentQuery(
+  const filesystemBrowseQuery = useEnvironmentQuery(
     isBrowsing &&
+      arkTmuxFlow === null &&
       browseDirectoryPath.length > 0 &&
       browseEnvironmentId !== null &&
       !relativePathNeedsActiveProject
@@ -680,12 +683,30 @@ function OpenCommandPaletteDialog(props: {
         })
       : null,
   );
+  const arkBrowseQuery = useEnvironmentQuery(
+    isBrowsing && arkTmuxFlow !== null && browseEnvironmentId !== null
+      ? arkEnvironment.browseTmuxPath({
+          environmentId: browseEnvironmentId,
+          input: {
+            machineIp: arkTmuxFlow.machineIp,
+            partialPath: browseDirectoryPath || query.trim(),
+          },
+        })
+      : null,
+  );
+  const browseQuery = arkTmuxFlow === null ? filesystemBrowseQuery : arkBrowseQuery;
   const browseResult = browseQuery.data;
   const isBrowsePending = browseQuery.isPending;
   const browseEntries = browseResult?.entries ?? EMPTY_BROWSE_ENTRIES;
   const { filteredEntries: filteredBrowseEntries, exactEntry: exactBrowseEntry } = useMemo(
-    () => filterBrowseEntries({ browseEntries, browseFilterQuery, highlightedItemValue }),
-    [browseEntries, browseFilterQuery, highlightedItemValue],
+    () =>
+      filterBrowseEntries({
+        browseEntries,
+        browseFilterQuery,
+        highlightedItemValue,
+        showHidden: arkTmuxFlow !== null,
+      }),
+    [arkTmuxFlow, browseEntries, browseFilterQuery, highlightedItemValue],
   );
 
   const openProjectFromSearch = useMemo(
@@ -1787,6 +1808,7 @@ function OpenCommandPaletteDialog(props: {
   const fileManagerName = getLocalFileManagerName(navigator.platform);
   const canOpenProjectFromFileManager =
     isBrowsing &&
+    arkTmuxFlow === null &&
     browseEnvironmentId !== null &&
     // For a desktop-local (WSL) env, only offer the picker once we have resolved
     // its desktop pool instance id. Without it pickFolder can't be routed to the

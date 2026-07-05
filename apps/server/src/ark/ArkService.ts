@@ -1,4 +1,9 @@
-import { ArkOperationError, type ArkMachine, type ArkTmuxSession } from "@t3tools/contracts";
+import {
+  ArkOperationError,
+  type ArkMachine,
+  type ArkTmuxSession,
+  type FilesystemBrowseResult,
+} from "@t3tools/contracts";
 import { parseTailscalePeers } from "@t3tools/tailscale";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -28,6 +33,10 @@ export class ArkService extends Context.Service<
       { readonly sessions: readonly ArkTmuxSession[] },
       ArkOperationError
     >;
+    readonly browseTmuxPath: (
+      partialPath: string,
+      machineIp?: string,
+    ) => Effect.Effect<FilesystemBrowseResult, ArkOperationError>;
     readonly ensureTmux: (
       name: string,
       machineIp?: string,
@@ -95,6 +104,29 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/webp": "webp",
   "image/gif": "gif",
 };
+
+function parseBrowseOutput(output: string): FilesystemBrowseResult {
+  let parentPath = "";
+  const entries: Array<{ name: string; fullPath: string }> = [];
+  for (const line of output.split(/\r?\n/u)) {
+    const [kind, first, second] = line.split("\t");
+    if (kind === "P" && first) parentPath = first;
+    if (kind === "E" && first && second) entries.push({ name: first, fullPath: second });
+  }
+  return { parentPath: parentPath || "~", entries };
+}
+
+function buildBrowsePathCommand(partialPath: string): string {
+  const raw = shellSingle(partialPath);
+  return [
+    `raw=${raw}`,
+    `case "$raw" in \\~) target="$HOME" ;; \\~/*) target="$HOME/\${raw#\\~/}" ;; /*) target="$raw" ;; *) target="$PWD/$raw" ;; esac`,
+    `case "$raw" in */|\\~) parent="$(realpath -m "$target")"; prefix="" ;; *) parent="$(realpath -m "$(dirname "$target")")"; prefix="$(basename "$target")" ;; esac`,
+    `printf 'P\\t%s\\n' "$parent"`,
+    `[ -d "$parent" ] || exit 0`,
+    `find "$parent" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort -f | while IFS= read -r full; do name="\${full##*/}"; case "$name" in "$prefix"*) printf 'E\\t%s\\t%s\\n' "$name" "$full" ;; esac; done`,
+  ].join("; ");
+}
 
 function decorateSessions(
   sessions: readonly ArkTmuxSession[],
@@ -202,6 +234,19 @@ export const make = Effect.fn("ArkService.make")(function* () {
       };
     });
 
+  const browseTmuxPath: ArkService["Service"]["browseTmuxPath"] = (partialPath, machineIp) =>
+    runShell(
+      processRunner,
+      "ark.browseTmuxPath",
+      remoteCommand(machineIp, buildBrowsePathCommand(partialPath)),
+    ).pipe(
+      Effect.flatMap((result) =>
+        result.code === 0
+          ? Effect.succeed(parseBrowseOutput(result.stdout))
+          : Effect.fail(operationError("ark.browseTmuxPath", commandText(result))),
+      ),
+    );
+
   const ensureTmux: ArkService["Service"]["ensureTmux"] = (name, machineIp, cwd, command) =>
     runShell(
       processRunner,
@@ -288,6 +333,7 @@ export const make = Effect.fn("ArkService.make")(function* () {
   return ArkService.of({
     listMachines,
     listTmuxSessions,
+    browseTmuxPath,
     ensureTmux,
     captureTmux,
     sendTmuxText,

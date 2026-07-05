@@ -1,7 +1,7 @@
 import { WS_METHODS } from "@t3tools/contracts";
 import { Atom } from "effect/unstable/reactivity";
 
-import { createEnvironmentRpcCommand } from "./runtime.ts";
+import { createEnvironmentRpcCommand, createEnvironmentRpcQueryAtomFamily } from "./runtime.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 
 export function createArkEnvironmentAtoms<R, E>(
@@ -15,6 +15,10 @@ export function createArkEnvironmentAtoms<R, E>(
     listTmuxSessions: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ark:list-tmux-sessions",
       tag: WS_METHODS.arkListTmuxSessions,
+    }),
+    browseTmuxPath: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:ark:browse-tmux-path",
+      tag: WS_METHODS.arkBrowseTmuxPath,
     }),
     ensureTmux: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:ark:ensure-tmux",

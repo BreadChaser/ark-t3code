@@ -102,6 +102,34 @@ describe("ArkService", () => {
     }).pipe(Effect.provide(testLayer(() => Effect.die("unexpected process call")))),
   );
 
+  it.effect("browses directories on the selected tmux machine", () =>
+    Effect.gen(function* () {
+      const ark = yield* ArkService.make();
+      const result = yield* ark.browseTmuxPath("~/Dev", "100.94.206.66");
+      assert.deepEqual(result, {
+        parentPath: "/home/tony",
+        entries: [{ name: "Development", fullPath: "/home/tony/Development" }],
+      });
+    }).pipe(
+      Effect.provide(
+        testLayer((request) => {
+          const command = request.args[1] ?? "";
+          assert.match(command, /tailscale ssh '100\.94\.206\.66'/u);
+          assert.match(command, /~\/Dev/u);
+          assert.match(command, /\$\{raw#\\~\/\}/u);
+          return Effect.succeed({
+            stdout: "P\t/home/tony\nE\tDevelopment\t/home/tony/Development\n",
+            stderr: "",
+            code: ChildProcessSpawner.ExitCode(0),
+            timedOut: false,
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          });
+        }),
+      ),
+    ),
+  );
+
   it.effect("saves pasted images on the target machine through stdin", () =>
     Effect.gen(function* () {
       const ark = yield* ArkService.make();

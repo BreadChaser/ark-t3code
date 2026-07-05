@@ -18,6 +18,7 @@ import {
   ArkListMachinesResult,
   ArkListTmuxSessionsResult,
   ArkOperationError,
+  ArkTmuxBrowseInput,
   ArkTmuxCaptureInput,
   ArkTmuxCaptureResult,
   ArkTmuxInput,
@@ -176,6 +177,7 @@ export const WS_METHODS = {
   // Ark methods
   arkListMachines: "ark.listMachines",
   arkListTmuxSessions: "ark.listTmuxSessions",
+  arkBrowseTmuxPath: "ark.browseTmuxPath",
   arkEnsureTmux: "ark.ensureTmux",
   arkCaptureTmux: "ark.captureTmux",
   arkSendTmuxText: "ark.sendTmuxText",
@@ -426,6 +428,12 @@ export const WsArkListMachinesRpc = Rpc.make(WS_METHODS.arkListMachines, {
 export const WsArkListTmuxSessionsRpc = Rpc.make(WS_METHODS.arkListTmuxSessions, {
   payload: Schema.Struct({}),
   success: ArkListTmuxSessionsResult,
+  error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
+});
+
+export const WsArkBrowseTmuxPathRpc = Rpc.make(WS_METHODS.arkBrowseTmuxPath, {
+  payload: ArkTmuxBrowseInput,
+  success: FilesystemBrowseResult,
   error: Schema.Union([ArkOperationError, EnvironmentAuthorizationError]),
 });
 
@@ -774,6 +782,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsAssetsCreateUrlRpc,
   WsArkListMachinesRpc,
   WsArkListTmuxSessionsRpc,
+  WsArkBrowseTmuxPathRpc,
   WsArkEnsureTmuxRpc,
   WsArkCaptureTmuxRpc,
   WsArkSendTmuxTextRpc,

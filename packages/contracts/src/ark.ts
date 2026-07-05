@@ -45,6 +45,12 @@ export const ArkTmuxInput = Schema.Struct({
 });
 export type ArkTmuxInput = typeof ArkTmuxInput.Type;
 
+export const ArkTmuxBrowseInput = Schema.Struct({
+  machineIp: Schema.optional(Schema.String),
+  partialPath: Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(4096)),
+});
+export type ArkTmuxBrowseInput = typeof ArkTmuxBrowseInput.Type;
+
 export const ArkTmuxCaptureInput = Schema.Struct({
   name: ArkTmuxName,
   machineIp: Schema.optional(Schema.String),
