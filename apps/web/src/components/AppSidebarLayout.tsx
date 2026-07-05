@@ -81,8 +81,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     <SidebarProvider className="h-dvh! min-h-0!" defaultOpen style={macosWindowControlsStyle}>
       <Sidebar
         side="left"
+        variant="floating"
         collapsible="offcanvas"
-        className="border-r border-border bg-card text-foreground"
+        className="bg-transparent text-foreground"
         resizable={{
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,
           shouldAcceptWidth: ({ nextWidth, wrapper }) =>

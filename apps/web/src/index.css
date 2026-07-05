@@ -290,7 +290,7 @@
   --background: #120d07;
   --app-chrome-background: #100b06;
   --foreground: #ffd89a;
-  --card: #1a1008;
+  --card: #1c1209;
   --card-foreground: #ffe1ad;
   --popover: #1d1209;
   --popover-foreground: #ffe1ad;
@@ -303,7 +303,7 @@
   --accent: rgb(255 179 71 / 0.14);
   --accent-foreground: #ffe7c2;
   --destructive: #ff6b4a;
-  --border: rgb(255 179 71 / 0.18);
+  --border: rgb(255 179 71 / 0.1);
   --input: rgb(255 179 71 / 0.22);
   --ring: #ffba5c;
   --destructive-foreground: #ff9a7f;
@@ -318,10 +318,13 @@
 html.ark body {
   color: var(--foreground);
   background-image:
-    radial-gradient(ellipse at 50% 45%, rgb(255 183 83 / 0.1), transparent 58%),
-    linear-gradient(135deg, rgb(255 179 71 / 0.04), transparent 38%),
-    linear-gradient(315deg, rgb(68 41 16 / 0.26), transparent 44%);
-  text-shadow: 0 0 0.55em rgb(255 179 71 / 0.16);
+    radial-gradient(ellipse at 50% 42%, rgb(255 183 83 / 0.18), transparent 52%),
+    radial-gradient(ellipse at 50% 50%, transparent 56%, rgb(0 0 0 / 0.5) 100%),
+    linear-gradient(135deg, rgb(255 179 71 / 0.08), transparent 40%),
+    linear-gradient(315deg, rgb(68 41 16 / 0.34), transparent 44%);
+  text-shadow:
+    0 0 0.45em rgb(255 179 71 / 0.24),
+    0 0 1.4em rgb(255 179 71 / 0.12);
 }
 
 html.ark body::before {
@@ -330,22 +333,93 @@ html.ark body::before {
   inset: 0;
   pointer-events: none;
   z-index: 2147483646;
-  opacity: 0.16;
+  opacity: 0.28;
   background: repeating-linear-gradient(
     to bottom,
-    rgb(255 204 130 / 0.18) 0,
-    rgb(255 204 130 / 0.18) 1px,
-    transparent 1px,
-    transparent 5px
+    rgb(255 204 130 / 0.2) 0,
+    rgb(255 204 130 / 0.2) 2px,
+    transparent 2px,
+    transparent 7px
   );
-  animation: ark-scanlines 18s linear infinite;
+  animation: ark-scanlines 14s linear infinite;
   mix-blend-mode: screen;
 }
 
 html.ark body::after {
-  opacity: 0.075;
+  opacity: 0.13;
   z-index: 2147483647;
   mix-blend-mode: screen;
+}
+
+html.ark #root::before {
+  content: "";
+  position: fixed;
+  inset: -8%;
+  pointer-events: none;
+  z-index: 2147483645;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 120px rgb(255 179 71 / 0.08),
+    inset 0 0 220px rgb(0 0 0 / 0.38);
+  transform: scale(1.02);
+}
+
+html.ark :where(.border, .border-t, .border-r, .border-b, .border-l, [class*="border-border"]) {
+  border-color: rgb(255 179 71 / 0.07) !important;
+}
+
+html.ark :where(.divide-y > :not(:last-child), .divide-x > :not(:last-child)) {
+  border-color: rgb(255 179 71 / 0.06) !important;
+}
+
+html.ark :where([data-slot="separator"], [data-sidebar="separator"]) {
+  opacity: 0.18;
+}
+
+html.ark [data-slot="sidebar-container"] {
+  padding: 0.75rem 0.4rem 0.75rem 0.75rem;
+  filter: drop-shadow(0 22px 45px rgb(0 0 0 / 0.32));
+}
+
+html.ark [data-slot="sidebar-inner"] {
+  border: 0 !important;
+  border-radius: 22px !important;
+  background:
+    linear-gradient(180deg, rgb(255 179 71 / 0.12), rgb(255 179 71 / 0.045)), rgb(16 10 5 / 0.86) !important;
+  box-shadow:
+    0 0 0 1px rgb(255 179 71 / 0.08),
+    0 0 42px rgb(255 179 71 / 0.11),
+    inset 0 0 48px rgb(255 179 71 / 0.045) !important;
+  backdrop-filter: blur(18px);
+}
+
+html.ark [data-slot="sidebar-inset"] {
+  margin: 0.75rem 0.75rem 0.75rem 0.25rem;
+  min-height: calc(100dvh - 1.5rem);
+  overflow: hidden;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgb(255 179 71 / 0.065), transparent 28%), rgb(18 12 7 / 0.76);
+  box-shadow:
+    0 0 0 1px rgb(255 179 71 / 0.055),
+    0 18px 60px rgb(0 0 0 / 0.24),
+    inset 0 0 70px rgb(255 179 71 / 0.035);
+}
+
+html.ark [data-slot="sidebar-rail"]::after {
+  background: transparent !important;
+}
+
+html.ark [data-sidebar="menu-sub"] {
+  border-left-color: transparent !important;
+}
+
+@media (max-width: 767px) {
+  html.ark [data-slot="sidebar-inset"] {
+    margin: 0;
+    min-height: 100dvh;
+    border-radius: 0;
+  }
 }
 
 html.ark ::selection {
