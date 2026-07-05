@@ -6,7 +6,15 @@ import {
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
-import { ImageIcon, RefreshCwIcon, SendIcon, SquareIcon, XIcon } from "lucide-react";
+import {
+  ImageIcon,
+  MessageSquareIcon,
+  RefreshCwIcon,
+  SendIcon,
+  SquareIcon,
+  TerminalIcon,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOpenAddProjectCommandPalette } from "../commandPaletteContext";
@@ -119,7 +127,7 @@ export function ArkHome() {
       setError(null);
       setSelectedSession((current) =>
         current === null
-          ? (sorted[0] ?? null)
+          ? null
           : (sorted.find((session) => sessionKey(session) === sessionKey(current)) ?? current),
       );
     },
@@ -344,134 +352,161 @@ export function ArkHome() {
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-foreground">
-                {selectedSession?.name ?? "No session selected"}
+                {selectedSession?.name ?? "Ark chat"}
               </div>
               <div className="text-xs text-muted-foreground">
-                {selectedSession === null ? "Live tmux capture" : machineLabel(selectedSession)}
+                {selectedSession === null ? "Codex / OpenCode" : machineLabel(selectedSession)}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void openAgentChat(CODEX_PROVIDER)}
-                disabled={isBusy}
-              >
-                Codex
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void openAgentChat(OPENCODE_PROVIDER)}
-                disabled={isBusy}
-              >
-                OpenCode
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => void refreshSessions(true)}>
-                <RefreshCwIcon />
-                Refresh
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive-outline"
-                onClick={() => void stopSelected()}
-                disabled={selectedSession === null}
-              >
-                <SquareIcon />
-                Stop
-              </Button>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto p-3">
-            <div className="min-h-full rounded-lg border border-amber-500/25 bg-[#151109] px-3 py-3 font-mono text-[13px] leading-5 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.10)]">
-              {selectedSession === null ? (
-                <button
-                  className="rounded-md border border-amber-400/20 px-3 py-2 text-amber-100 hover:bg-amber-300/10"
-                  type="button"
-                  onClick={() => void openSession(DEFAULT_SESSION)}
-                  disabled={isBusy}
-                >
-                  Open ark-main
-                </button>
-              ) : terminalText.length === 0 ? (
-                <span className="text-amber-200/55">Waiting for terminal output...</span>
-              ) : (
-                <pre className="whitespace-pre-wrap break-words">{terminalText}</pre>
+              {selectedSession === null ? null : (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedSession(null)}>
+                    <MessageSquareIcon />
+                    Chat
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openAgentChat(CODEX_PROVIDER)}
+                    disabled={isBusy}
+                  >
+                    Codex
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openAgentChat(OPENCODE_PROVIDER)}
+                    disabled={isBusy}
+                  >
+                    OpenCode
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void refreshSessions(true)}>
+                    <RefreshCwIcon />
+                    Refresh
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive-outline"
+                    onClick={() => void stopSelected()}
+                  >
+                    <SquareIcon />
+                    Stop
+                  </Button>
+                </>
               )}
             </div>
           </div>
 
-          <form
-            className="border-t border-border p-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void sendDraft();
-            }}
-          >
-            {pastedImages.length === 0 ? null : (
-              <div className="mb-2 flex flex-wrap gap-2">
-                {pastedImages.map((image) => (
-                  <div
-                    key={image.id}
-                    className="flex max-w-[220px] items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs"
-                  >
-                    <img
-                      src={image.previewUrl}
-                      alt={image.name}
-                      className="size-8 rounded object-cover"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{image.name}</span>
-                      <span className="block truncate text-muted-foreground">{image.path}</span>
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${image.name}`}
-                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                      onClick={() => removePastedImage(image.id)}
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  </div>
-                ))}
+          {selectedSession === null ? (
+            <div className="flex min-h-0 flex-1 flex-col justify-end overflow-auto p-3">
+              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-4">
+                <div className="max-w-[78%] rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 text-sm shadow-sm">
+                  Start a real agent chat.
+                </div>
+                <div className="ml-auto max-w-[78%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground shadow-sm">
+                  Codex or OpenCode
+                </div>
               </div>
-            )}
-            <div className="flex gap-2">
-              <Textarea
-                className="flex-1"
-                disabled={selectedSession === null}
-                onChange={(event) => setDraft(event.target.value)}
-                onPaste={(event) => {
-                  const files = Array.from(event.clipboardData.files);
-                  if (files.some((file) => file.type.startsWith("image/"))) {
-                    event.preventDefault();
-                    void pasteImages(files);
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void sendDraft();
-                  }
-                }}
-                placeholder={
-                  selectedSession === null
-                    ? "Open a session first"
-                    : `Send to ${selectedSession.name}`
-                }
-                rows={2}
-                value={draft}
-              />
-              <Button
-                disabled={selectedSession === null || draft.trim().length === 0}
-                type="submit"
-              >
-                {pastedImages.length > 0 ? <ImageIcon /> : <SendIcon />}
-                Send
-              </Button>
+              <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 border-t border-border pt-3">
+                <Button onClick={() => void openAgentChat(CODEX_PROVIDER)} disabled={isBusy}>
+                  <MessageSquareIcon />
+                  Codex
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void openAgentChat(OPENCODE_PROVIDER)}
+                  disabled={isBusy}
+                >
+                  <MessageSquareIcon />
+                  OpenCode
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void openSession(DEFAULT_SESSION)}
+                  disabled={isBusy}
+                >
+                  <TerminalIcon />
+                  Terminal
+                </Button>
+              </div>
             </div>
-          </form>
+          ) : (
+            <>
+              <div className="min-h-0 flex-1 overflow-auto p-3">
+                <div className="min-h-full rounded-lg border border-amber-500/25 bg-[#151109] px-3 py-3 font-mono text-[13px] leading-5 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.10)]">
+                  {terminalText.length === 0 ? (
+                    <span className="text-amber-200/55">Waiting for terminal output...</span>
+                  ) : (
+                    <pre className="whitespace-pre-wrap break-words">{terminalText}</pre>
+                  )}
+                </div>
+              </div>
+
+              <form
+                className="border-t border-border p-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void sendDraft();
+                }}
+              >
+                {pastedImages.length === 0 ? null : (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {pastedImages.map((image) => (
+                      <div
+                        key={image.id}
+                        className="flex max-w-[220px] items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs"
+                      >
+                        <img
+                          src={image.previewUrl}
+                          alt={image.name}
+                          className="size-8 rounded object-cover"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{image.name}</span>
+                          <span className="block truncate text-muted-foreground">{image.path}</span>
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${image.name}`}
+                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          onClick={() => removePastedImage(image.id)}
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Textarea
+                    className="flex-1"
+                    onChange={(event) => setDraft(event.target.value)}
+                    onPaste={(event) => {
+                      const files = Array.from(event.clipboardData.files);
+                      if (files.some((file) => file.type.startsWith("image/"))) {
+                        event.preventDefault();
+                        void pasteImages(files);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void sendDraft();
+                      }
+                    }}
+                    placeholder={`Send to ${selectedSession.name}`}
+                    rows={2}
+                    value={draft}
+                  />
+                  <Button disabled={draft.trim().length === 0} type="submit">
+                    {pastedImages.length > 0 ? <ImageIcon /> : <SendIcon />}
+                    Send
+                  </Button>
+                </div>
+              </form>
+            </>
+          )}
         </section>
       </div>
     </div>
