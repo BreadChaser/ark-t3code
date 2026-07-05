@@ -31,6 +31,8 @@ export class ArkService extends Context.Service<
     readonly ensureTmux: (
       name: string,
       machineIp?: string,
+      cwd?: string,
+      command?: string,
     ) => Effect.Effect<void, ArkOperationError>;
     readonly captureTmux: (
       name: string,
@@ -200,11 +202,11 @@ export const make = Effect.fn("ArkService.make")(function* () {
       };
     });
 
-  const ensureTmux: ArkService["Service"]["ensureTmux"] = (name, machineIp) =>
+  const ensureTmux: ArkService["Service"]["ensureTmux"] = (name, machineIp, cwd, command) =>
     runShell(
       processRunner,
       "ark.ensureTmux",
-      remoteCommand(machineIp, buildEnsureTmuxScript(name)),
+      remoteCommand(machineIp, buildEnsureTmuxScript(name, cwd, command)),
     ).pipe(Effect.flatMap((result) => ensureExitOk("ark.ensureTmux", result)));
 
   const captureTmux: ArkService["Service"]["captureTmux"] = (name, scroll, machineIp) =>

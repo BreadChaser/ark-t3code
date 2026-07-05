@@ -28,6 +28,10 @@ describe("ManagedTmux", () => {
       "tmux has-session -t 'ark-main' 2>/dev/null || tmux new-session -d -s 'ark-main' -c ~; tmux set-option -t 'ark-main' history-limit 10000",
     );
     assert.equal(
+      buildEnsureTmuxScript("ark-codex-app", "/home/tony/app", "codex"),
+      "tmux has-session -t 'ark-codex-app' 2>/dev/null || tmux new-session -d -s 'ark-codex-app' -c '/home/tony/app' 'codex'; tmux set-option -t 'ark-codex-app' history-limit 10000",
+    );
+    assert.equal(
       buildCapturePaneCommand("ark-main", 500),
       "tmux capture-pane -pt 'ark-main' -S -500 -e",
     );

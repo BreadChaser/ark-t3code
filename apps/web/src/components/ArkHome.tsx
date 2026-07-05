@@ -1,11 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
-import {
-  defaultInstanceIdForDriver,
-  type ArkTmuxSession,
-  type EnvironmentId,
-  ProviderDriverKind,
-} from "@t3tools/contracts";
-import { createModelSelection } from "@t3tools/shared/model";
+import { type ArkTmuxSession, type EnvironmentId } from "@t3tools/contracts";
 import {
   ImageIcon,
   MessageSquareIcon,
@@ -18,10 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOpenAddProjectCommandPalette } from "../commandPaletteContext";
-import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { getDefaultServerModel } from "../providerModels";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
-import { primaryServerProvidersAtom } from "~/state/server";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { arkEnvironment } from "../state/ark";
@@ -29,8 +19,6 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
 const DEFAULT_SESSION = "ark-main";
-const CODEX_PROVIDER = ProviderDriverKind.make("codex");
-const OPENCODE_PROVIDER = ProviderDriverKind.make("opencode");
 export const ARK_OPEN_SESSION_EVENT = "ark:open-session";
 
 type ArkSessionTarget = Pick<ArkTmuxSession, "name" | "machineIp" | "machineName">;
@@ -71,9 +59,7 @@ function randomLocalId(): string {
 export function ArkHome() {
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const providers = useAtomValue(primaryServerProvidersAtom);
   const openAddProject = useOpenAddProjectCommandPalette();
-  const { defaultProjectRef, handleNewThread } = useHandleNewThread();
   const environmentId = useMemo<EnvironmentId | null>(
     () => primaryEnvironmentId ?? environments[0]?.environmentId ?? null,
     [environments, primaryEnvironmentId],
@@ -178,31 +164,6 @@ export function ArkHome() {
       await captureSelected(session);
     },
     [captureSelected, ensureTmux, environmentId, refreshSessions],
-  );
-
-  const openAgentChat = useCallback(
-    async (provider: typeof CODEX_PROVIDER | typeof OPENCODE_PROVIDER) => {
-      if (defaultProjectRef === null) {
-        openAddProject();
-        return;
-      }
-
-      setIsBusy(true);
-      try {
-        await handleNewThread(defaultProjectRef, {
-          modelSelection: createModelSelection(
-            defaultInstanceIdForDriver(provider),
-            getDefaultServerModel(providers, provider),
-          ),
-        });
-        setError(null);
-      } catch (error) {
-        setError(error instanceof Error ? error.message : "Could not open agent chat.");
-      } finally {
-        setIsBusy(false);
-      }
-    },
-    [defaultProjectRef, handleNewThread, openAddProject, providers],
   );
 
   const sendDraft = useCallback(async () => {
@@ -365,21 +326,9 @@ export function ArkHome() {
                     <MessageSquareIcon />
                     Chat
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void openAgentChat(CODEX_PROVIDER)}
-                    disabled={isBusy}
-                  >
-                    Codex
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void openAgentChat(OPENCODE_PROVIDER)}
-                    disabled={isBusy}
-                  >
-                    OpenCode
+                  <Button size="sm" variant="outline" onClick={openAddProject} disabled={isBusy}>
+                    <MessageSquareIcon />
+                    New session
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => void refreshSessions(true)}>
                     <RefreshCwIcon />
@@ -402,24 +351,16 @@ export function ArkHome() {
             <div className="flex min-h-0 flex-1 flex-col justify-end overflow-auto p-3">
               <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-4">
                 <div className="max-w-[78%] rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 text-sm shadow-sm">
-                  Start a real agent chat.
+                  Start an Ark chat session.
                 </div>
                 <div className="ml-auto max-w-[78%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground shadow-sm">
-                  Codex or OpenCode
+                  Pick Codex, OpenCode, or Terminal in a folder.
                 </div>
               </div>
               <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 border-t border-border pt-3">
-                <Button onClick={() => void openAgentChat(CODEX_PROVIDER)} disabled={isBusy}>
+                <Button onClick={openAddProject} disabled={isBusy}>
                   <MessageSquareIcon />
-                  Codex
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void openAgentChat(OPENCODE_PROVIDER)}
-                  disabled={isBusy}
-                >
-                  <MessageSquareIcon />
-                  OpenCode
+                  New session
                 </Button>
                 <Button
                   variant="outline"

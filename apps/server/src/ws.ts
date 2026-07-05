@@ -1470,9 +1470,13 @@ const makeWsRpcLayer = (
             "rpc.aggregate": "ark",
           }),
         [WS_METHODS.arkEnsureTmux]: (input) =>
-          observeRpcEffect(WS_METHODS.arkEnsureTmux, ark.ensureTmux(input.name, input.machineIp), {
-            "rpc.aggregate": "ark",
-          }),
+          observeRpcEffect(
+            WS_METHODS.arkEnsureTmux,
+            ark.ensureTmux(input.name, input.machineIp, input.cwd, input.command),
+            {
+              "rpc.aggregate": "ark",
+            },
+          ),
         [WS_METHODS.arkCaptureTmux]: (input) =>
           observeRpcEffect(
             WS_METHODS.arkCaptureTmux,

@@ -108,10 +108,12 @@ export function parseTmuxSessions(output: string): readonly ManagedTmuxSession[]
     });
 }
 
-export function buildEnsureTmuxScript(tmuxName: string): string {
+export function buildEnsureTmuxScript(tmuxName: string, cwd = "~", command?: string): string {
   const target = tmuxTarget(tmuxName);
+  const startDirectory = cwd === "~" ? "~" : shellSingle(cwd);
+  const sessionCommand = command?.trim();
   return [
-    `tmux has-session -t ${target} 2>/dev/null || tmux new-session -d -s ${target} -c ~`,
+    `tmux has-session -t ${target} 2>/dev/null || tmux new-session -d -s ${target} -c ${startDirectory}${sessionCommand ? ` ${shellSingle(sessionCommand)}` : ""}`,
     `tmux set-option -t ${target} history-limit 10000`,
   ].join("; ");
 }

@@ -8,6 +8,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   DEFAULT_MODEL,
+  type ArkMachine,
   type DesktopWslState,
   type EnvironmentId,
   type FilesystemBrowseResult,
@@ -113,6 +114,7 @@ import {
 } from "./CommandPalette.logic";
 import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteResults } from "./CommandPaletteResults";
+import { ARK_OPEN_SESSION_EVENT } from "./ArkHome";
 import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
@@ -169,6 +171,30 @@ function tmuxSessionDescription(session: ArkTmuxSession): string {
   const attached = session.attached === null ? "?" : String(session.attached);
   const machine = session.machineName ?? (session.machineIp ? session.machineIp : "This device");
   return `${machine} - ${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
+}
+
+type ArkTmuxMode = "terminal" | "codex" | "opencode";
+
+const ARK_TMUX_MODES: ReadonlyArray<{
+  readonly mode: ArkTmuxMode;
+  readonly label: string;
+  readonly command?: string;
+}> = [
+  { mode: "codex", label: "Codex", command: "codex" },
+  { mode: "opencode", label: "OpenCode", command: "opencode" },
+  { mode: "terminal", label: "Terminal" },
+];
+
+function arkTmuxMachineLabel(machine: Pick<ArkMachine, "hostname" | "tailscaleIp" | "isSelf">) {
+  return machine.isSelf ? "This device" : machine.hostname || machine.tailscaleIp;
+}
+
+function arkTmuxSessionName(mode: ArkTmuxMode, cwd: string): string {
+  const leaf = (cwd.replace(/\/+$/u, "").split("/").pop() || "home")
+    .replaceAll(/[^a-zA-Z0-9._-]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "")
+    .slice(0, 40);
+  return `ark-${mode}-${leaf || "home"}`;
 }
 
 type AddProjectRemoteProviderKind = Extract<
@@ -486,6 +512,9 @@ function OpenCommandPaletteDialog(props: {
   const listTmuxSessions = useAtomCommand(arkEnvironment.listTmuxSessions, {
     reportFailure: false,
   });
+  const listArkMachines = useAtomCommand(arkEnvironment.listMachines, {
+    reportFailure: false,
+  });
   const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, {
     reportFailure: false,
   });
@@ -505,6 +534,12 @@ function OpenCommandPaletteDialog(props: {
   );
   const [isPickingProjectFolder, setIsPickingProjectFolder] = useState(false);
   const [addProjectCloneFlow, setAddProjectCloneFlow] = useState<AddProjectCloneFlow | null>(null);
+  const [arkTmuxFlow, setArkTmuxFlow] = useState<{
+    readonly environmentId: EnvironmentId;
+    readonly mode: ArkTmuxMode;
+    readonly machineIp?: string;
+    readonly machineName?: string;
+  } | null>(null);
   const [isTrustedBackendFlow, setIsTrustedBackendFlow] = useState(false);
   const [isAddingTrustedBackend, setIsAddingTrustedBackend] = useState(false);
   const [isRemoteProjectLookingUp, setIsRemoteProjectLookingUp] = useState(false);
@@ -764,6 +799,7 @@ function OpenCommandPaletteDialog(props: {
 
   function popView(): void {
     setAddProjectCloneFlow(null);
+    setArkTmuxFlow(null);
     setIsTrustedBackendFlow(false);
     if (viewStack.length <= 1) {
       setAddProjectEnvironmentId(null);
@@ -785,6 +821,7 @@ function OpenCommandPaletteDialog(props: {
     (environmentId: EnvironmentId): void => {
       setAddProjectEnvironmentId(environmentId);
       setAddProjectCloneFlow(null);
+      setArkTmuxFlow(null);
       pushPaletteView({
         addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
         groups: [],
@@ -798,6 +835,7 @@ function OpenCommandPaletteDialog(props: {
     (environmentId: EnvironmentId, source: AddProjectRemoteSource): void => {
       setAddProjectEnvironmentId(environmentId);
       setAddProjectCloneFlow({ step: "repository", environmentId, source });
+      setArkTmuxFlow(null);
       pushPaletteView({
         addonIcon: remoteProjectSourceIcon(source, ADDON_ICON_CLASS),
         groups: [],
@@ -815,6 +853,7 @@ function OpenCommandPaletteDialog(props: {
   const startTrustedBackendFlow = useCallback(() => {
     setAddProjectEnvironmentId(null);
     setAddProjectCloneFlow(null);
+    setArkTmuxFlow(null);
     setIsTrustedBackendFlow(true);
     pushPaletteView({
       addonIcon: <NetworkIcon className={ADDON_ICON_CLASS} />,
@@ -824,8 +863,23 @@ function OpenCommandPaletteDialog(props: {
   }, []);
 
   const ensureTmuxSession = useCallback(
-    async (environmentId: EnvironmentId, name: string, machineIp?: string): Promise<void> => {
-      const result = await ensureTmux({ environmentId, input: { name, machineIp } });
+    async (input: {
+      readonly environmentId: EnvironmentId;
+      readonly name: string;
+      readonly machineIp?: string;
+      readonly machineName?: string;
+      readonly cwd?: string;
+      readonly command?: string;
+    }): Promise<void> => {
+      const result = await ensureTmux({
+        environmentId: input.environmentId,
+        input: {
+          name: input.name,
+          machineIp: input.machineIp,
+          cwd: input.cwd,
+          command: input.command,
+        },
+      });
       if (result._tag === "Failure") {
         if (!isAtomCommandInterrupted(result)) {
           toastManager.add(
@@ -842,16 +896,79 @@ function OpenCommandPaletteDialog(props: {
       toastManager.add({
         type: "success",
         title: "Tmux session ready",
-        description: name,
+        description: input.name,
       });
       setOpen(false);
+      await navigate({ to: "/" });
+      window.dispatchEvent(
+        new CustomEvent(ARK_OPEN_SESSION_EVENT, {
+          detail: {
+            name: input.name,
+            machineIp: input.machineIp,
+            machineName: input.machineName,
+          },
+        }),
+      );
     },
-    [ensureTmux, setOpen],
+    [ensureTmux, navigate, setOpen],
+  );
+
+  const startArkTmuxFolderPick = useCallback(
+    (input: {
+      readonly environmentId: EnvironmentId;
+      readonly mode: ArkTmuxMode;
+      readonly machineIp?: string;
+      readonly machineName?: string;
+    }): void => {
+      setAddProjectEnvironmentId(input.environmentId);
+      setAddProjectCloneFlow(null);
+      setIsTrustedBackendFlow(false);
+      setArkTmuxFlow(input);
+      const mode = ARK_TMUX_MODES.find((candidate) => candidate.mode === input.mode);
+      pushPaletteView({
+        addonIcon: <TerminalIcon className={ADDON_ICON_CLASS} />,
+        groups: [],
+        initialQuery: getAddProjectInitialQueryForEnvironment(input.environmentId),
+      });
+      setHighlightedItemValue(null);
+      setQuery(getAddProjectInitialQueryForEnvironment(input.environmentId));
+      if (mode) {
+        toastManager.add({
+          type: "info",
+          title: `Pick folder for ${mode.label}`,
+          description: input.machineName ?? "This device",
+        });
+      }
+    },
+    [getAddProjectInitialQueryForEnvironment],
+  );
+
+  const submitArkTmuxFlow = useCallback(
+    async (cwd: string): Promise<void> => {
+      if (arkTmuxFlow === null) return;
+      const mode = ARK_TMUX_MODES.find((candidate) => candidate.mode === arkTmuxFlow.mode);
+      const trimmedCwd = cwd.trim();
+      if (!mode || trimmedCwd.length === 0) return;
+
+      await ensureTmuxSession({
+        environmentId: arkTmuxFlow.environmentId,
+        name: arkTmuxSessionName(mode.mode, trimmedCwd),
+        machineIp: arkTmuxFlow.machineIp,
+        machineName: arkTmuxFlow.machineName,
+        cwd: trimmedCwd,
+        command: mode.command,
+      });
+      setArkTmuxFlow(null);
+    },
+    [arkTmuxFlow, ensureTmuxSession],
   );
 
   const startTmuxSessionSelection = useCallback(
     async (environmentId: EnvironmentId): Promise<void> => {
-      const result = await listTmuxSessions({ environmentId, input: {} });
+      const [result, machinesResult] = await Promise.all([
+        listTmuxSessions({ environmentId, input: {} }),
+        listArkMachines({ environmentId, input: {} }),
+      ]);
       if (result._tag === "Failure") {
         if (!isAtomCommandInterrupted(result)) {
           toastManager.add(
@@ -866,18 +983,50 @@ function OpenCommandPaletteDialog(props: {
       }
 
       const sessions = result.value.sessions;
-      const items: CommandPaletteActionItem[] = [
-        {
+      const machines =
+        machinesResult._tag === "Success"
+          ? machinesResult.value.machines.filter(
+              (machine) => machine.online && machine.os === "linux",
+            )
+          : [];
+      const machineTargets =
+        machines.length > 0
+          ? machines
+          : [
+              {
+                hostname: "This device",
+                tailscaleIp: "",
+                isSelf: true,
+              } satisfies Pick<ArkMachine, "hostname" | "tailscaleIp" | "isSelf">,
+            ];
+      const createItems: CommandPaletteActionItem[] = machineTargets.flatMap((machine) =>
+        ARK_TMUX_MODES.map((mode) => ({
           kind: "action",
-          value: `action:add-project:${environmentId}:tmux:create-ark-main`,
-          searchTerms: ["tmux", "ark", "session", "create", "terminal"],
-          title: "Create or open ark-main",
-          description: "Managed tmux session",
+          value: `action:add-project:${environmentId}:tmux:create:${machine.isSelf ? "local" : machine.tailscaleIp}:${mode.mode}`,
+          searchTerms: [
+            "tmux",
+            "ark",
+            "session",
+            "create",
+            "terminal",
+            mode.label,
+            machine.hostname,
+          ],
+          title: `${mode.label} on ${arkTmuxMachineLabel(machine)}`,
+          description: "Pick a folder, then open Ark",
           icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
+          keepOpen: true,
           run: async () => {
-            await ensureTmuxSession(environmentId, "ark-main");
+            startArkTmuxFolderPick({
+              environmentId,
+              mode: mode.mode,
+              machineIp: machine.isSelf ? undefined : machine.tailscaleIp,
+              machineName: arkTmuxMachineLabel(machine),
+            });
           },
-        },
+        })),
+      );
+      const sessionItems: CommandPaletteActionItem[] = [
         ...sessions.map(
           (session): CommandPaletteActionItem => ({
             kind: "action",
@@ -894,7 +1043,12 @@ function OpenCommandPaletteDialog(props: {
             description: tmuxSessionDescription(session),
             icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
             run: async () => {
-              await ensureTmuxSession(environmentId, session.name, session.machineIp);
+              await ensureTmuxSession({
+                environmentId,
+                name: session.name,
+                machineIp: session.machineIp,
+                machineName: session.machineName,
+              });
             },
           }),
         ),
@@ -905,11 +1059,14 @@ function OpenCommandPaletteDialog(props: {
       setIsTrustedBackendFlow(false);
       pushPaletteView({
         addonIcon: <TerminalIcon className={ADDON_ICON_CLASS} />,
-        groups: [{ value: `tmux:${environmentId}`, label: "Tmux sessions", items }],
+        groups: [
+          { value: `tmux-create:${environmentId}`, label: "New Ark session", items: createItems },
+          { value: `tmux:${environmentId}`, label: "Existing tmux sessions", items: sessionItems },
+        ],
         initialQuery: "",
       });
     },
-    [ensureTmuxSession, listTmuxSessions],
+    [ensureTmuxSession, listArkMachines, listTmuxSessions, startArkTmuxFolderPick],
   );
 
   const buildAddProjectSourceGroups = useCallback(
@@ -1586,6 +1743,11 @@ function OpenCommandPaletteDialog(props: {
 
   const inputPlaceholder =
     (isTrustedBackendFlow ? "Enter Tailscale backend URL" : null) ??
+    (arkTmuxFlow
+      ? `Open ${
+          ARK_TMUX_MODES.find((mode) => mode.mode === arkTmuxFlow.mode)?.label ?? "Ark"
+        } in folder`
+      : null) ??
     remoteProjectInputPlaceholder(addProjectCloneFlow) ??
     getCommandPaletteInputPlaceholder(paletteMode);
   const isSubmenu = paletteMode === "submenu" || paletteMode === "submenu-browse";
@@ -1604,9 +1766,11 @@ function OpenCommandPaletteDialog(props: {
     ? willCreateProjectPath
       ? "Create & Clone"
       : "Clone"
-    : willCreateProjectPath
-      ? "Create & Add"
-      : "Add";
+    : arkTmuxFlow
+      ? "Open"
+      : willCreateProjectPath
+        ? "Create & Add"
+        : "Add";
   const addShortcutLabel = hasHighlightedBrowseItem ? `${submitModifierLabel} Enter` : "Enter";
   const remoteProjectButtonLabel = addProjectCloneFlow
     ? addProjectCloneFlow.source === "url"
@@ -1681,7 +1845,9 @@ function OpenCommandPaletteDialog(props: {
 
     if (shouldSubmitBrowsePath) {
       event.preventDefault();
-      if (isCloneDestinationStep) {
+      if (arkTmuxFlow) {
+        void submitArkTmuxFlow(resolvedAddProjectPath);
+      } else if (isCloneDestinationStep) {
         void submitAddProjectCloneFlow(resolvedAddProjectPath);
       } else {
         void handleAddProject(resolvedAddProjectPath);
@@ -1766,6 +1932,10 @@ function OpenCommandPaletteDialog(props: {
     if (!pickedPath) {
       return;
     }
+    if (arkTmuxFlow) {
+      await submitArkTmuxFlow(pickedPath);
+      return;
+    }
     if (parseWslUncPath(pickedPath)) {
       desktopWslState ??= (await window.desktopBridge?.getWslState().catch(() => null)) ?? null;
       let primaryRunningDistro: string | null = null;
@@ -1829,6 +1999,8 @@ function OpenCommandPaletteDialog(props: {
     handleAddProjectForEnvironment,
     isPickingProjectFolder,
     primaryEnvironmentId,
+    arkTmuxFlow,
+    submitArkTmuxFlow,
   ]);
 
   return (
@@ -1846,7 +2018,7 @@ function OpenCommandPaletteDialog(props: {
       }}
     >
       <Command
-        key={`${viewStack.length}-${browseGeneration}-${isBrowsing}-${isTrustedBackendFlow}-${addProjectCloneFlow?.step ?? "none"}`}
+        key={`${viewStack.length}-${browseGeneration}-${isBrowsing}-${isTrustedBackendFlow}-${addProjectCloneFlow?.step ?? "none"}-${arkTmuxFlow?.mode ?? "none"}`}
         aria-label="Command palette"
         autoHighlight={
           isBrowsing || isRemoteProjectCloneFlow || isTrustedBackendFlow ? false : "always"
@@ -1973,7 +2145,9 @@ function OpenCommandPaletteDialog(props: {
                       if (relativePathNeedsActiveProject) {
                         return;
                       }
-                      if (isCloneDestinationStep) {
+                      if (arkTmuxFlow) {
+                        void submitArkTmuxFlow(resolvedAddProjectPath);
+                      } else if (isCloneDestinationStep) {
                         void submitAddProjectCloneFlow(resolvedAddProjectPath);
                       } else {
                         void handleAddProject(resolvedAddProjectPath);

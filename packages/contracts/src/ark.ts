@@ -40,6 +40,8 @@ export type ArkListTmuxSessionsResult = typeof ArkListTmuxSessionsResult.Type;
 export const ArkTmuxInput = Schema.Struct({
   name: ArkTmuxName,
   machineIp: Schema.optional(Schema.String),
+  cwd: Schema.optional(Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(4096))),
+  command: Schema.optional(Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(512))),
 });
 export type ArkTmuxInput = typeof ArkTmuxInput.Type;
 
