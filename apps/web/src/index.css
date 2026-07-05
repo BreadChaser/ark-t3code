@@ -287,44 +287,48 @@
 
 :root.ark.ark {
   color-scheme: dark;
-  --background: #120d07;
-  --app-chrome-background: #100b06;
-  --foreground: #ffd89a;
-  --card: #1c1209;
-  --card-foreground: #ffe1ad;
-  --popover: #1d1209;
-  --popover-foreground: #ffe1ad;
-  --primary: #ffb347;
+  --background: #050402;
+  --app-chrome-background: #050402;
+  --foreground: #ffefc2;
+  --card: #0c0905;
+  --card-foreground: #ffefc2;
+  --popover: #0c0905;
+  --popover-foreground: #ffefc2;
+  --primary: #ffb02e;
   --primary-foreground: #1a0d02;
-  --secondary: rgb(255 179 71 / 0.1);
-  --secondary-foreground: #ffd89a;
-  --muted: rgb(255 179 71 / 0.08);
-  --muted-foreground: #c99356;
-  --accent: rgb(255 179 71 / 0.14);
-  --accent-foreground: #ffe7c2;
+  --secondary: rgb(255 176 47 / 0.08);
+  --secondary-foreground: #e4be75;
+  --muted: rgb(255 176 47 / 0.07);
+  --muted-foreground: #8f7040;
+  --accent: rgb(255 176 47 / 0.12);
+  --accent-foreground: #ffefc2;
   --destructive: #ff6b4a;
-  --border: rgb(255 179 71 / 0.1);
-  --input: rgb(255 179 71 / 0.22);
-  --ring: #ffba5c;
+  --border: rgb(255 176 47 / 0.2);
+  --input: rgb(255 176 47 / 0.2);
+  --ring: #ffb02e;
   --destructive-foreground: #ff9a7f;
   --info: #64d6ff;
   --info-foreground: #98e5ff;
   --success: #8ee36b;
   --success-foreground: #b4f291;
-  --warning: #ffb347;
-  --warning-foreground: #ffd188;
+  --warning: #ffb02e;
+  --warning-foreground: #ffefc2;
 }
 
 html.ark body {
   color: var(--foreground);
   background-image:
-    radial-gradient(ellipse at 50% 42%, rgb(255 183 83 / 0.18), transparent 52%),
-    radial-gradient(ellipse at 50% 50%, transparent 56%, rgb(0 0 0 / 0.5) 100%),
-    linear-gradient(135deg, rgb(255 179 71 / 0.08), transparent 40%),
-    linear-gradient(315deg, rgb(68 41 16 / 0.34), transparent 44%);
-  text-shadow:
-    0 0 0.45em rgb(255 179 71 / 0.24),
-    0 0 1.4em rgb(255 179 71 / 0.12);
+    linear-gradient(
+      115deg,
+      rgb(255 176 47 / 0.04),
+      transparent 30%,
+      rgb(198 107 17 / 0.025) 68%,
+      transparent
+    ),
+    repeating-linear-gradient(87deg, rgb(255 176 47 / 0.018) 0 1px, transparent 1px 29px),
+    repeating-linear-gradient(0deg, rgb(0 0 0 / 0.16) 0 2px, transparent 2px 6px), var(--background);
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0 0 6px rgb(255 176 47 / 0.16);
 }
 
 html.ark body::before {
@@ -333,22 +337,40 @@ html.ark body::before {
   inset: 0;
   pointer-events: none;
   z-index: 2147483646;
-  opacity: 0.28;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgb(255 204 130 / 0.2) 0,
-    rgb(255 204 130 / 0.2) 2px,
-    transparent 2px,
-    transparent 7px
-  );
-  animation: ark-scanlines 14s linear infinite;
-  mix-blend-mode: screen;
+  background:
+    repeating-linear-gradient(180deg, rgb(255 232 170 / 0.105) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(
+      94deg,
+      transparent 0 13px,
+      rgb(255 176 47 / 0.035) 13px 14px,
+      transparent 14px 47px
+    ),
+    repeating-linear-gradient(
+      37deg,
+      transparent 0 21px,
+      rgb(0 0 0 / 0.22) 21px 22px,
+      transparent 22px 61px
+    ),
+    linear-gradient(180deg, rgb(255 176 47 / 0.05), rgb(0 0 0 / 0.1));
+  animation: ark-scanlines 18s ease-in-out infinite;
+  mix-blend-mode: overlay;
+  opacity: 0.62;
 }
 
 html.ark body::after {
-  opacity: 0.13;
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgb(255 236 184 / 0.045),
+      transparent 52%,
+      rgb(0 0 0 / 0.1) 86%,
+      rgb(0 0 0 / 0.24) 100%
+    ),
+    linear-gradient(90deg, rgb(255 0 0 / 0.025), rgb(0 255 0 / 0.018), rgb(0 0 255 / 0.025));
+  box-shadow: inset 0 0 42px rgb(0 0 0 / 0.46);
+  opacity: 1;
   z-index: 2147483647;
-  mix-blend-mode: screen;
+  mix-blend-mode: normal;
 }
 
 html.ark #root::before {
@@ -357,11 +379,13 @@ html.ark #root::before {
   inset: -8%;
   pointer-events: none;
   z-index: 2147483645;
-  border-radius: 50%;
-  box-shadow:
-    inset 0 0 120px rgb(255 179 71 / 0.08),
-    inset 0 0 220px rgb(0 0 0 / 0.38);
-  transform: scale(1.02);
+  background: linear-gradient(
+    96deg,
+    transparent 0 7%,
+    rgb(255 176 47 / 0.035) 47%,
+    transparent 93%
+  );
+  transform: scaleX(1.03) scaleY(1.015);
 }
 
 html.ark :where(.border, .border-t, .border-r, .border-b, .border-l, [class*="border-border"]) {
@@ -378,32 +402,28 @@ html.ark :where([data-slot="separator"], [data-sidebar="separator"]) {
 
 html.ark [data-slot="sidebar-container"] {
   padding: 0.75rem 0.4rem 0.75rem 0.75rem;
-  filter: drop-shadow(0 22px 45px rgb(0 0 0 / 0.32));
+  filter: drop-shadow(0 18px 48px rgb(0 0 0 / 0.72));
 }
 
 html.ark [data-slot="sidebar-inner"] {
-  border: 0 !important;
-  border-radius: 22px !important;
-  background:
-    linear-gradient(180deg, rgb(255 179 71 / 0.12), rgb(255 179 71 / 0.045)), rgb(16 10 5 / 0.86) !important;
+  border: 1px solid rgb(255 176 47 / 0.2) !important;
+  border-radius: 8px !important;
+  background: #0c0905 !important;
   box-shadow:
-    0 0 0 1px rgb(255 179 71 / 0.08),
-    0 0 42px rgb(255 179 71 / 0.11),
-    inset 0 0 48px rgb(255 179 71 / 0.045) !important;
-  backdrop-filter: blur(18px);
+    0 0 0 1px rgb(255 176 47 / 0.08),
+    0 18px 48px rgb(0 0 0 / 0.72) !important;
+  backdrop-filter: none;
 }
 
 html.ark [data-slot="sidebar-inset"] {
   margin: 0.75rem 0.75rem 0.75rem 0.25rem;
   min-height: calc(100dvh - 1.5rem);
   overflow: hidden;
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgb(255 179 71 / 0.065), transparent 28%), rgb(18 12 7 / 0.76);
+  border-radius: 18px;
+  background: transparent;
   box-shadow:
-    0 0 0 1px rgb(255 179 71 / 0.055),
-    0 18px 60px rgb(0 0 0 / 0.24),
-    inset 0 0 70px rgb(255 179 71 / 0.035);
+    0 0 0 1px rgb(255 176 47 / 0.08),
+    0 18px 48px rgb(0 0 0 / 0.45);
 }
 
 html.ark [data-slot="sidebar-rail"]::after {
@@ -437,11 +457,27 @@ html.ark ::-webkit-scrollbar-thumb:hover {
 }
 
 @keyframes ark-scanlines {
-  from {
-    background-position-y: 0;
+  0%,
+  100% {
+    background-position:
+      0 0,
+      0 0,
+      0 0,
+      0 0;
   }
-  to {
-    background-position-y: 80px;
+  45% {
+    background-position:
+      0 -10px,
+      3px 0,
+      -2px 4px,
+      0 0;
+  }
+  72% {
+    background-position:
+      0 7px,
+      -2px 0,
+      2px -3px,
+      0 0;
   }
 }
 
