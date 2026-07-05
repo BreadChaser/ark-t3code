@@ -344,7 +344,7 @@ export function resolveProjectExpanded(
       return expanded;
     }
   }
-  return projectExpandedById[LEGACY_PROJECT_EXPANSION_DEFAULT_KEY] ?? true;
+  return projectExpandedById[LEGACY_PROJECT_EXPANSION_DEFAULT_KEY] ?? false;
 }
 
 export function setProjectExpanded(

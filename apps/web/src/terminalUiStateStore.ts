@@ -34,6 +34,10 @@ interface PersistedTerminalUiStateStoreState {
   terminalStateByThreadKey?: Record<string, ThreadTerminalUiState>;
 }
 
+function closePersistedTerminalUiState(state: ThreadTerminalUiState): ThreadTerminalUiState {
+  return normalizeThreadTerminalUiState({ ...state, terminalOpen: false });
+}
+
 export function migratePersistedTerminalUiStateStoreState(
   persistedState: unknown,
   _version: number,
@@ -46,9 +50,9 @@ export function migratePersistedTerminalUiStateStoreState(
   const persistedUiStateByThreadKey =
     candidate.terminalUiStateByThreadKey ?? candidate.terminalStateByThreadKey ?? {};
   const terminalUiStateByThreadKey = Object.fromEntries(
-    Object.entries(persistedUiStateByThreadKey).filter(([threadKey]) =>
-      parseScopedThreadKey(threadKey),
-    ),
+    Object.entries(persistedUiStateByThreadKey)
+      .filter(([threadKey]) => parseScopedThreadKey(threadKey))
+      .map(([threadKey, state]) => [threadKey, closePersistedTerminalUiState(state)]),
   );
 
   return { terminalUiStateByThreadKey };
@@ -770,11 +774,16 @@ export const useTerminalUiStateStore = create<TerminalUiStateStoreState>()(
     },
     {
       name: TERMINAL_UI_STATE_STORAGE_KEY,
-      version: 4,
+      version: 5,
       storage: createJSONStorage(createTerminalUiStateStorage),
       migrate: migratePersistedTerminalUiStateStoreState,
       partialize: (state) => ({
-        terminalUiStateByThreadKey: state.terminalUiStateByThreadKey,
+        terminalUiStateByThreadKey: Object.fromEntries(
+          Object.entries(state.terminalUiStateByThreadKey).map(([threadKey, terminalState]) => [
+            threadKey,
+            closePersistedTerminalUiState(terminalState),
+          ]),
+        ),
       }),
     },
   ),

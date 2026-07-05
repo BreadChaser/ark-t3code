@@ -201,7 +201,7 @@ describe("terminalUiStateStore actions", () => {
     expect(migrated).toEqual({
       terminalUiStateByThreadKey: {
         [scopedThreadKey(THREAD_REF)]: {
-          terminalOpen: true,
+          terminalOpen: false,
           terminalHeight: 320,
           terminalIds: ["term-1"],
           activeTerminalId: "term-1",

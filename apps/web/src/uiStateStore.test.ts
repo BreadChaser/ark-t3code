@@ -64,7 +64,7 @@ describe("uiStateStore pure functions", () => {
       false,
     );
     expect(resolveProjectExpanded({ [legacyKey]: false }, ["new-logical", legacyKey])).toBe(false);
-    expect(resolveProjectExpanded({}, ["new-logical"])).toBe(true);
+    expect(resolveProjectExpanded({}, ["new-logical"])).toBe(false);
   });
 
   it("sets expansion for every stable key belonging to a logical project", () => {
@@ -192,7 +192,7 @@ describe("parsePersistedState", () => {
     expect(parsed.projectOrder).toEqual([projectBKey, projectAKey]);
     expect(resolveProjectExpanded(parsed.projectExpandedById, [projectAKey])).toBe(true);
     expect(resolveProjectExpanded(parsed.projectExpandedById, [projectBKey])).toBe(false);
-    expect(resolveProjectExpanded(parsed.projectExpandedById, ["unknown"])).toBe(true);
+    expect(resolveProjectExpanded(parsed.projectExpandedById, ["unknown"])).toBe(false);
   });
 
   it("preserves legacy expanded-only semantics for one-way migration", () => {
@@ -304,6 +304,6 @@ describe("uiStateStore persistence", () => {
     const persisted = JSON.parse(
       localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
     ) as PersistedUiState;
-    expect(resolveProjectExpanded(persisted.projectExpandedById ?? {}, ["unknown"])).toBe(true);
+    expect(resolveProjectExpanded(persisted.projectExpandedById ?? {}, ["unknown"])).toBe(false);
   });
 });

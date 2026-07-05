@@ -3091,22 +3091,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [refreshArkSessions]);
 
-  useEffect(() => {
-    if (arkMachineGroups.length === 0) return;
-    setExpandedMachines((current) => {
-      const next = new Set(current);
-      for (const group of arkMachineGroups) next.add(group.key);
-      return next;
-    });
-    setExpandedTerminalGroups((current) => {
-      const next = new Set(current);
-      for (const group of arkMachineGroups) {
-        if (group.sessions.length > 0) next.add(group.key);
-      }
-      return next;
-    });
-  }, [arkMachineGroups]);
-
   const openSession = useCallback(
     async (session: ArkTmuxSession) => {
       if (environmentId === null) return;
