@@ -12,6 +12,7 @@ import {
   SquarePenIcon,
   TerminalIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react";
 import {
   ChangeRequestStatusIcon,
@@ -2773,9 +2774,11 @@ function SidebarBrand() {
       <span className="truncate text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
         Ark
       </span>
-      <span className="sidebar-brand-stage shrink-0 items-center whitespace-nowrap rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
-        {stageLabel}
-      </span>
+      {stageLabel ? (
+        <span className="sidebar-brand-stage shrink-0 items-center whitespace-nowrap rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
+          {stageLabel}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -3049,6 +3052,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     reportFailure: false,
   });
   const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, { reportFailure: false });
+  const stopTmux = useAtomCommand(arkEnvironment.stopTmux, { reportFailure: false });
   const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
   const [expandedMachines, setExpandedMachines] = useState<ReadonlySet<string>>(() => new Set());
   const [expandedTerminalGroups, setExpandedTerminalGroups] = useState<ReadonlySet<string>>(
@@ -3102,6 +3106,25 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       window.dispatchEvent(new CustomEvent(ARK_OPEN_SESSION_EVENT, { detail: session }));
     },
     [ensureTmux, environmentId, navigate],
+  );
+
+  const stopSession = useCallback(
+    async (session: ArkTmuxSession) => {
+      if (environmentId === null) return;
+      setSessions((current) =>
+        current.filter((item) => arkSessionKey(item) !== arkSessionKey(session)),
+      );
+      const result = await stopTmux({
+        environmentId,
+        input: { name: session.name, machineIp: session.machineIp },
+      });
+      if (result._tag === "Failure") {
+        await refreshArkSessions();
+        return;
+      }
+      await refreshArkSessions();
+    },
+    [environmentId, refreshArkSessions, stopTmux],
   );
 
   const toggleMachine = useCallback((key: string) => {
@@ -3336,16 +3359,26 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         {expandedTerminalGroups.has(group.key)
                           ? group.sessions.map((session) => (
                               <SidebarMenuItem key={arkSessionKey(session)}>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
-                                  onClick={() => void openSession(session)}
-                                >
-                                  <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                                  <span className="min-w-0 flex-1 truncate font-medium">
-                                    {session.name}
-                                  </span>
-                                </button>
+                                <div className="group flex items-center rounded-md px-6 py-1.5 text-xs transition-colors hover:bg-accent hover:text-foreground">
+                                  <button
+                                    type="button"
+                                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                    onClick={() => void openSession(session)}
+                                  >
+                                    <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                                    <span className="min-w-0 flex-1 truncate font-medium">
+                                      {session.name}
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label={`Stop ${session.name}`}
+                                    className="ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/60 opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                                    onClick={() => void stopSession(session)}
+                                  >
+                                    <XIcon className="size-3" />
+                                  </button>
+                                </div>
                               </SidebarMenuItem>
                             ))
                           : null}
@@ -3433,16 +3466,26 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                     {expandedTerminalGroups.has(group.key)
                       ? group.sessions.map((session) => (
                           <SidebarMenuItem key={arkSessionKey(session)}>
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
-                              onClick={() => void openSession(session)}
-                            >
-                              <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                              <span className="min-w-0 flex-1 truncate font-medium">
-                                {session.name}
-                              </span>
-                            </button>
+                            <div className="group flex items-center rounded-md px-6 py-1.5 text-xs transition-colors hover:bg-accent hover:text-foreground">
+                              <button
+                                type="button"
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                onClick={() => void openSession(session)}
+                              >
+                                <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                                <span className="min-w-0 flex-1 truncate font-medium">
+                                  {session.name}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Stop ${session.name}`}
+                                className="ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground/60 opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                                onClick={() => void stopSession(session)}
+                              >
+                                <XIcon className="size-3" />
+                              </button>
+                            </div>
                           </SidebarMenuItem>
                         ))
                       : null}

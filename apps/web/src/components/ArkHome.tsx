@@ -5,7 +5,6 @@ import {
   RefreshCwIcon,
   SendIcon,
   SquareIcon,
-  TerminalIcon,
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +17,6 @@ import { arkEnvironment } from "../state/ark";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 
-const DEFAULT_SESSION = "ark-main";
 export const ARK_OPEN_SESSION_EVENT = "ark:open-session";
 
 type ArkSessionTarget = Pick<ArkTmuxSession, "name" | "machineIp" | "machineName">;
@@ -348,30 +346,7 @@ export function ArkHome() {
           </div>
 
           {selectedSession === null ? (
-            <div className="flex min-h-0 flex-1 flex-col justify-end overflow-auto p-3">
-              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-4">
-                <div className="max-w-[78%] rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 text-sm shadow-sm">
-                  Start an Ark chat session.
-                </div>
-                <div className="ml-auto max-w-[78%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground shadow-sm">
-                  Pick Codex, OpenCode, or Terminal in a folder.
-                </div>
-              </div>
-              <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 border-t border-border pt-3">
-                <Button onClick={openAddProject} disabled={isBusy}>
-                  <MessageSquareIcon />
-                  New session
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void openSession(DEFAULT_SESSION)}
-                  disabled={isBusy}
-                >
-                  <TerminalIcon />
-                  Terminal
-                </Button>
-              </div>
-            </div>
+            <div className="min-h-0 flex-1" />
           ) : (
             <>
               <div className="min-h-0 flex-1 overflow-auto p-3">
