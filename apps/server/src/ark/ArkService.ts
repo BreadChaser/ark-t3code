@@ -60,7 +60,7 @@ export class ArkService extends Context.Service<
       machineIp?: string,
     ) => Effect.Effect<void, ArkOperationError>;
     readonly saveTmuxImage: (input: {
-      readonly machineIp?: string;
+      readonly machineIp?: string | undefined;
       readonly name: string;
       readonly mimeType: string;
       readonly dataBase64: string;

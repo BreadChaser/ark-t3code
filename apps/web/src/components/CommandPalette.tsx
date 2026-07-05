@@ -8,12 +8,15 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   DEFAULT_MODEL,
+  DEFAULT_SERVER_SETTINGS,
   type ArkMachine,
   type DesktopWslState,
   type EnvironmentId,
   type FilesystemBrowseResult,
   type ArkTmuxSession,
   type ProjectId,
+  ProviderDriverKind,
+  type ProviderInstanceConfig,
   ProviderInstanceId,
   type SourceControlDiscoveryResult,
   type SourceControlProviderKind,
@@ -65,7 +68,7 @@ import { sourceControlEnvironment } from "../state/sourceControl";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
-import { useProjects, useThreadShells } from "../state/entities";
+import { useProjects, useServerConfigs, useThreadShells } from "../state/entities";
 import {
   startNewThreadInProjectFromContext,
   startNewThreadFromContext,
@@ -118,7 +121,7 @@ import { ARK_OPEN_SESSION_EVENT } from "./ArkHome";
 import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
-import { primaryServerKeybindingsAtom } from "../state/server";
+import { primaryServerKeybindingsAtom, serverEnvironment } from "../state/server";
 import { resolveShortcutCommand } from "../keybindings";
 import {
   Command,
@@ -195,6 +198,48 @@ function arkTmuxSessionName(mode: ArkTmuxMode, cwd: string): string {
     .replaceAll(/^-+|-+$/gu, "")
     .slice(0, 40);
   return `ark-${mode}-${leaf || "home"}`;
+}
+
+function arkCodexRemoteProviderInstanceId(
+  machineIp: string,
+  machineName?: string,
+): ProviderInstanceId {
+  const label = `${machineName ?? "remote"}-${machineIp}`;
+  let hash = 0;
+  for (let index = 0; index < label.length; index += 1) {
+    hash = (hash * 31 + label.charCodeAt(index)) >>> 0;
+  }
+  const suffix = hash.toString(36);
+  const slug = label
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9_-]+/gu, "_")
+    .replaceAll(/^_+|_+$/gu, "")
+    .slice(0, Math.max(1, 64 - "ark_codex__".length - suffix.length));
+  return ProviderInstanceId.make(`ark_codex_${slug || "remote"}_${suffix}`);
+}
+
+function arkCodexRemoteProviderInstance(
+  machineIp: string,
+  machineName?: string,
+): ProviderInstanceConfig {
+  return {
+    driver: ProviderDriverKind.make("codex"),
+    displayName: `Codex on ${machineName ?? machineIp}`,
+    enabled: true,
+    config: { enabled: true, binaryPath: "codex" },
+    environment: [
+      {
+        name: "ARK_CODEX_REMOTE_MACHINE",
+        value: machineIp,
+        sensitive: false,
+      },
+      {
+        name: "ARK_CODEX_REMOTE_PROBE_CWD",
+        value: "~",
+        sensitive: false,
+      },
+    ],
+  };
 }
 
 type AddProjectRemoteProviderKind = Extract<
@@ -518,12 +563,16 @@ function OpenCommandPaletteDialog(props: {
   const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, {
     reportFailure: false,
   });
+  const updateServerSettings = useAtomCommand(serverEnvironment.updateSettings, {
+    reportFailure: false,
+  });
   const { environments } = useEnvironments();
   const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironment = usePrimaryEnvironment();
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
   const projects = useProjects();
+  const serverConfigs = useServerConfigs();
   const threads = useThreadShells();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const [viewStack, setViewStack] = useState<CommandPaletteView[]>([]);
@@ -537,8 +586,8 @@ function OpenCommandPaletteDialog(props: {
   const [arkTmuxFlow, setArkTmuxFlow] = useState<{
     readonly environmentId: EnvironmentId;
     readonly mode: ArkTmuxMode;
-    readonly machineIp?: string;
-    readonly machineName?: string;
+    readonly machineIp?: string | undefined;
+    readonly machineName?: string | undefined;
   } | null>(null);
   const [isTrustedBackendFlow, setIsTrustedBackendFlow] = useState(false);
   const [isAddingTrustedBackend, setIsAddingTrustedBackend] = useState(false);
@@ -887,10 +936,10 @@ function OpenCommandPaletteDialog(props: {
     async (input: {
       readonly environmentId: EnvironmentId;
       readonly name: string;
-      readonly machineIp?: string;
-      readonly machineName?: string;
+      readonly machineIp?: string | undefined;
+      readonly machineName?: string | undefined;
       readonly cwd?: string;
-      readonly command?: string;
+      readonly command?: string | undefined;
     }): Promise<void> => {
       const result = await ensureTmux({
         environmentId: input.environmentId,
@@ -938,8 +987,8 @@ function OpenCommandPaletteDialog(props: {
     (input: {
       readonly environmentId: EnvironmentId;
       readonly mode: ArkTmuxMode;
-      readonly machineIp?: string;
-      readonly machineName?: string;
+      readonly machineIp?: string | undefined;
+      readonly machineName?: string | undefined;
     }): void => {
       setAddProjectEnvironmentId(input.environmentId);
       setAddProjectCloneFlow(null);
@@ -964,13 +1013,19 @@ function OpenCommandPaletteDialog(props: {
     [getAddProjectInitialQueryForEnvironment],
   );
 
-  const openLocalCodexThread = useCallback(
-    async (environmentId: EnvironmentId, rawCwd: string): Promise<void> => {
+  const openCodexThread = useCallback(
+    async (input: {
+      readonly environmentId: EnvironmentId;
+      readonly rawCwd: string;
+      readonly instanceId: ProviderInstanceId;
+      readonly createWorkspaceRootIfMissing: boolean;
+    }): Promise<void> => {
+      const { environmentId, instanceId, rawCwd } = input;
       const cwd = resolveProjectPathForDispatch(rawCwd, null);
       if (cwd.length === 0) return;
 
       const modelSelection = {
-        instanceId: ProviderInstanceId.make("codex"),
+        instanceId,
         model: DEFAULT_MODEL,
       };
       const existing = findProjectByPath(
@@ -986,7 +1041,7 @@ function OpenCommandPaletteDialog(props: {
             projectId,
             title: inferProjectTitleFromPath(cwd),
             workspaceRoot: cwd,
-            createWorkspaceRootIfMissing: true,
+            createWorkspaceRootIfMissing: input.createWorkspaceRootIfMissing,
             defaultModelSelection: modelSelection,
           },
         });
@@ -1023,6 +1078,50 @@ function OpenCommandPaletteDialog(props: {
     [createProject, handleNewThread, projects, setOpen],
   );
 
+  const openRemoteCodexThread = useCallback(
+    async (input: {
+      readonly environmentId: EnvironmentId;
+      readonly rawCwd: string;
+      readonly machineIp: string;
+      readonly machineName?: string | undefined;
+    }): Promise<void> => {
+      const instanceId = arkCodexRemoteProviderInstanceId(input.machineIp, input.machineName);
+      const instance = arkCodexRemoteProviderInstance(input.machineIp, input.machineName);
+      const settings = serverConfigs.get(input.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
+      const updateResult = await updateServerSettings({
+        environmentId: input.environmentId,
+        input: {
+          patch: {
+            providerInstances: {
+              ...settings.providerInstances,
+              [instanceId]: instance,
+            },
+          },
+        },
+      });
+      if (updateResult._tag === "Failure") {
+        if (!isAtomCommandInterrupted(updateResult)) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to prepare remote Codex",
+              description: errorMessage(squashAtomCommandFailure(updateResult)),
+            }),
+          );
+        }
+        return;
+      }
+
+      await openCodexThread({
+        environmentId: input.environmentId,
+        rawCwd: input.rawCwd,
+        instanceId,
+        createWorkspaceRootIfMissing: false,
+      });
+    },
+    [openCodexThread, serverConfigs, updateServerSettings],
+  );
+
   const submitArkTmuxFlow = useCallback(
     async (cwd: string): Promise<void> => {
       if (arkTmuxFlow === null) return;
@@ -1030,8 +1129,22 @@ function OpenCommandPaletteDialog(props: {
       const trimmedCwd = cwd.trim();
       if (!mode || trimmedCwd.length === 0) return;
 
-      if (mode.mode === "codex" && arkTmuxFlow.machineIp === undefined) {
-        await openLocalCodexThread(arkTmuxFlow.environmentId, trimmedCwd);
+      if (mode.mode === "codex") {
+        if (arkTmuxFlow.machineIp === undefined) {
+          await openCodexThread({
+            environmentId: arkTmuxFlow.environmentId,
+            rawCwd: trimmedCwd,
+            instanceId: ProviderInstanceId.make("codex"),
+            createWorkspaceRootIfMissing: true,
+          });
+        } else {
+          await openRemoteCodexThread({
+            environmentId: arkTmuxFlow.environmentId,
+            rawCwd: trimmedCwd,
+            machineIp: arkTmuxFlow.machineIp,
+            machineName: arkTmuxFlow.machineName,
+          });
+        }
         setArkTmuxFlow(null);
         return;
       }
@@ -1046,7 +1159,7 @@ function OpenCommandPaletteDialog(props: {
       });
       setArkTmuxFlow(null);
     },
-    [arkTmuxFlow, ensureTmuxSession, openLocalCodexThread],
+    [arkTmuxFlow, ensureTmuxSession, openCodexThread, openRemoteCodexThread],
   );
 
   const startTmuxSessionSelection = useCallback(
@@ -1100,7 +1213,7 @@ function OpenCommandPaletteDialog(props: {
           ],
           title: `${mode.label} on ${arkTmuxMachineLabel(machine)}`,
           description:
-            mode.mode === "codex" && machine.isSelf
+            mode.mode === "codex"
               ? "Pick a folder, then open T3 chat"
               : "Pick a folder, then open Ark",
           icon: <TerminalIcon className={ITEM_ICON_CLASS} />,

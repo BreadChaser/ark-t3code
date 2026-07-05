@@ -31,6 +31,7 @@ import {
   buildServerProvider,
   type ServerProviderDraft,
 } from "../providerSnapshot.ts";
+import { ARK_CODEX_REMOTE_PROBE_CWD_ENV, buildArkRemoteCodexSpawn } from "./CodexRemoteLaunch.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import packageJson from "../../../package.json" with { type: "json" };
 const isCodexAppServerSpawnError = Schema.is(CodexErrors.CodexAppServerSpawnError);
@@ -297,19 +298,28 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   // Expand here for parity with `CodexTextGeneration`/`CodexSessionRuntime`.
   const resolvedHomePath = input.homePath ? expandHomePath(input.homePath) : undefined;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const environment = {
+  const environment: NodeJS.ProcessEnv = {
     ...input.environment,
     ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
   };
-  const spawnCommand = yield* resolveSpawnCommand(input.binaryPath, ["app-server"], {
+  const args = ["app-server"];
+  const remoteSpawn = buildArkRemoteCodexSpawn({
+    binaryPath: input.binaryPath,
+    args,
+    cwd: environment[ARK_CODEX_REMOTE_PROBE_CWD_ENV] ?? input.cwd,
     env: environment,
-    extendEnv: true,
   });
+  const spawnCommand =
+    remoteSpawn?.spawnCommand ??
+    (yield* resolveSpawnCommand(input.binaryPath, args, {
+      env: environment,
+      extendEnv: true,
+    }));
   const child = yield* spawner
     .spawn(
       ChildProcess.make(spawnCommand.command, spawnCommand.args, {
-        cwd: input.cwd,
-        env: environment,
+        cwd: remoteSpawn?.cwd ?? input.cwd,
+        env: remoteSpawn?.env ?? environment,
         extendEnv: true,
         forceKillAfter: CODEX_APP_SERVER_PROBE_FORCE_KILL_AFTER,
         shell: spawnCommand.shell,
