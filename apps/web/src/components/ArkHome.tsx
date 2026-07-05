@@ -1,16 +1,7 @@
 import type { ArkTmuxSession, EnvironmentId } from "@t3tools/contracts";
-import {
-  ImageIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  SendIcon,
-  SquareIcon,
-  TerminalIcon,
-  XIcon,
-} from "lucide-react";
+import { ImageIcon, RefreshCwIcon, SendIcon, SquareIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cn } from "~/lib/utils";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 
@@ -35,12 +26,6 @@ function sessionKey(session: ArkSessionTarget): string {
 
 function machineLabel(session: ArkSessionTarget): string {
   return session.machineName ?? (session.machineIp ? session.machineIp : "This device");
-}
-
-function sessionLabel(session: ArkTmuxSession): string {
-  const windows = session.windows === null ? "?" : String(session.windows);
-  const attached = session.attached === null ? "?" : String(session.attached);
-  return `${machineLabel(session)} - ${windows} window${windows === "1" ? "" : "s"} - ${attached} attached`;
 }
 
 function readFileBase64(file: File): Promise<string> {
@@ -79,7 +64,7 @@ export function ArkHome() {
   const saveTmuxImage = useAtomCommand(arkEnvironment.saveTmuxImage, { reportFailure: false });
   const stopTmux = useAtomCommand(arkEnvironment.stopTmux, { reportFailure: false });
 
-  const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
+  const [, setSessions] = useState<ArkTmuxSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<ArkSessionTarget | null>(null);
   const [terminalText, setTerminalText] = useState("");
   const [draft, setDraft] = useState("");
@@ -307,69 +292,14 @@ export function ArkHome() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-base font-semibold text-foreground">Ark sessions</h1>
-          <p className="text-xs text-muted-foreground">tmux chats on this backend</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => void refreshSessions(true)}>
-            <RefreshCwIcon />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={() => void openSession(DEFAULT_SESSION)} disabled={isBusy}>
-            <PlusIcon />
-            Open ark-main
-          </Button>
-        </div>
-      </div>
-
       {error === null ? null : (
         <div className="rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive-foreground">
           {error}
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="min-h-0 overflow-auto rounded-lg border border-border bg-card/50 p-2">
-          {sessions.length === 0 ? (
-            <button
-              className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-sm hover:bg-accent"
-              type="button"
-              onClick={() => void openSession(DEFAULT_SESSION)}
-            >
-              <TerminalIcon className="size-4 text-muted-foreground" />
-              <span>
-                <span className="block font-medium text-foreground">Create ark-main</span>
-                <span className="block text-xs text-muted-foreground">No tmux sessions yet</span>
-              </span>
-            </button>
-          ) : (
-            sessions.map((session) => (
-              <button
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent",
-                  selectedSession !== null &&
-                    sessionKey(selectedSession) === sessionKey(session) &&
-                    "bg-accent text-accent-foreground",
-                )}
-                key={sessionKey(session)}
-                type="button"
-                onClick={() => void openSession(session)}
-              >
-                <TerminalIcon className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{session.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {sessionLabel(session)}
-                  </span>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-
-        <section className="flex min-h-0 flex-col rounded-lg border border-border bg-background">
+      <div className="flex min-h-0 flex-1">
+        <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-background">
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-foreground">
@@ -379,21 +309,34 @@ export function ArkHome() {
                 {selectedSession === null ? "Live tmux capture" : machineLabel(selectedSession)}
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="destructive-outline"
-              onClick={() => void stopSelected()}
-              disabled={selectedSession === null}
-            >
-              <SquareIcon />
-              Stop
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => void refreshSessions(true)}>
+                <RefreshCwIcon />
+                Refresh
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive-outline"
+                onClick={() => void stopSelected()}
+                disabled={selectedSession === null}
+              >
+                <SquareIcon />
+                Stop
+              </Button>
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto p-3">
-            <div className="max-w-[980px] rounded-lg border border-amber-500/25 bg-[#151109] px-3 py-3 font-mono text-[13px] leading-5 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.10)]">
+            <div className="min-h-full rounded-lg border border-amber-500/25 bg-[#151109] px-3 py-3 font-mono text-[13px] leading-5 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.10)]">
               {selectedSession === null ? (
-                <span className="text-amber-200/55">Open a tmux session to start.</span>
+                <button
+                  className="rounded-md border border-amber-400/20 px-3 py-2 text-amber-100 hover:bg-amber-300/10"
+                  type="button"
+                  onClick={() => void openSession(DEFAULT_SESSION)}
+                  disabled={isBusy}
+                >
+                  Open ark-main
+                </button>
               ) : terminalText.length === 0 ? (
                 <span className="text-amber-200/55">Waiting for terminal output...</span>
               ) : (

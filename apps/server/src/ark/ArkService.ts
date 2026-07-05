@@ -131,7 +131,7 @@ function safeUploadFileName(name: string, mimeType: string): string {
     .replaceAll(/[^a-zA-Z0-9._-]+/gu, "-")
     .replaceAll(/^-+|-+$/gu, "")
     .slice(0, 80);
-  return `${Date.now()}-${stem || "paste"}.${extension}`;
+  return `${stem || "paste"}.${extension}`;
 }
 
 export const make = Effect.fn("ArkService.make")(function* () {
@@ -242,11 +242,17 @@ export const make = Effect.fn("ArkService.make")(function* () {
       return Effect.fail(operationError("ark.saveTmuxImage", "Only image uploads are supported."));
     }
     const fileName = safeUploadFileName(input.name, input.mimeType);
+    const extensionIndex = fileName.lastIndexOf(".");
+    const fileStem = extensionIndex === -1 ? fileName : fileName.slice(0, extensionIndex);
+    const fileExtension = extensionIndex === -1 ? "" : fileName.slice(extensionIndex);
     const command = [
       `dir="$HOME/.ark/uploads"`,
       `file=${shellSingle(fileName)}`,
+      `stem=${shellSingle(fileStem)}`,
+      `ext=${shellSingle(fileExtension)}`,
       `mkdir -p "$dir"`,
       `path="$dir/$file"`,
+      `if [ -e "$path" ]; then path="$dir/$stem-$(date +%s%3N)$ext"; fi`,
       `base64 -d > "$path"`,
       `printf %s "$path"`,
     ].join(" && ");
