@@ -17,12 +17,12 @@ export function NoActiveThreadState() {
         >
           {isElectron ? (
             <span className="text-xs text-muted-foreground/50 wco:pr-[var(--workspace-native-controls-inset)]">
-              No active thread
+              Ark
             </span>
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground md:text-muted-foreground/60">
-                No active thread
+                Ark
               </span>
             </div>
           )}

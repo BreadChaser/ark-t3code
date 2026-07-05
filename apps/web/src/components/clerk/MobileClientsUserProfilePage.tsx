@@ -96,8 +96,7 @@ function EmptyMobileClients() {
       <EmptyHeader>
         <EmptyTitle>No mobile clients</EmptyTitle>
         <EmptyDescription>
-          Sign in to T3 Code on your iPhone to register it for push notifications and Live
-          Activities.
+          Sign in to Ark on your iPhone to register it for push notifications and Live Activities.
         </EmptyDescription>
       </EmptyHeader>
     </Empty>
@@ -117,7 +116,7 @@ export function MobileClientsUserProfilePage() {
         <div>
           <h2 className="text-base font-semibold tracking-[-0.01em]">Mobile clients</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Devices registered to receive T3 Connect activity from your environments.
+            Devices registered to receive Ark Link activity from your environments.
           </p>
         </div>
         <Button

@@ -86,6 +86,6 @@ it("formats no-auth headless serve output without pairing instructions", () => {
   });
 
   expect(output).toContain("Connection string: http://192.168.1.42:3773");
-  expect(output).toContain("Pairing: disabled");
+  expect(output).toContain("Access: no pairing required");
   expect(output).not.toContain("Pairing URL:");
 });

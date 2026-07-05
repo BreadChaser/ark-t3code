@@ -792,7 +792,7 @@ const buildAppUnderTest = (options?: {
       ),
       Layer.provide(
         Layer.mock(CloudCliTokenManager.CloudCliTokenManager)({
-          get: Effect.die(new Error("Unexpected T3 Connect CLI authorization request.")),
+          get: Effect.die(new Error("Unexpected Ark Link CLI authorization request.")),
           getExisting: Effect.succeed(Option.none()),
           hasCredential: Effect.succeed(false),
           clear: Effect.void,
@@ -1423,7 +1423,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         },
         scope: "orchestration:read orchestration:operate terminal:operate review:write",
         clientMetadata: {
-          label: "T3 Code Mobile",
+          label: "Ark Mobile",
           deviceType: "mobile",
           os: "iOS",
         },
@@ -1450,7 +1450,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(response.status, 200);
       assert.equal(clientsResponse.status, 200);
       assert.deepInclude(mobileClient?.client, {
-        label: "T3 Code Mobile",
+        label: "Ark Mobile",
         deviceType: "mobile",
         os: "iOS",
         ipAddress: "127.0.0.1",
@@ -2403,7 +2403,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("serves the documented T3 Connect mint credential endpoint", () =>
+  it.effect("serves the documented Ark Link mint credential endpoint", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
 
@@ -2462,7 +2462,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("serves signed T3 Connect environment health checks", () =>
+  it.effect("serves signed Ark Link environment health checks", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
 

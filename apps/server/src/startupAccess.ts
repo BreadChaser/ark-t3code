@@ -122,7 +122,7 @@ export const renderTerminalQrCode = (value: string, margin = 2): string => {
 export const formatHeadlessServeOutput = (accessInfo: HeadlessServeAccessInfo): string =>
   accessInfo.pairingUrl
     ? [
-        "T3 Code server is ready.",
+        "Ark server is ready.",
         `Connection string: ${accessInfo.connectionString}`,
         `Token: ${accessInfo.token}`,
         `Pairing URL: ${accessInfo.pairingUrl}`,
@@ -131,9 +131,9 @@ export const formatHeadlessServeOutput = (accessInfo: HeadlessServeAccessInfo): 
         "",
       ].join("\n")
     : [
-        "T3 Code server is ready.",
+        "Ark server is ready.",
         `Connection string: ${accessInfo.connectionString}`,
-        "Pairing: disabled",
+        "Access: no pairing required",
         "",
       ].join("\n");
 

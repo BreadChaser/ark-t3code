@@ -1214,7 +1214,7 @@ function OpenCommandPaletteDialog(props: {
           title: `${mode.label} on ${arkTmuxMachineLabel(machine)}`,
           description:
             mode.mode === "codex"
-              ? "Pick a folder, then open T3 chat"
+              ? "Pick a folder, then open Ark chat"
               : "Pick a folder, then open Ark",
           icon: <TerminalIcon className={ITEM_ICON_CLASS} />,
           keepOpen: true,

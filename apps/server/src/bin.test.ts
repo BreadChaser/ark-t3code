@@ -188,11 +188,11 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         assert.fail(`Expected ShowHelp, got ${error._tag}`);
       }
       assert.deepEqual(error.commandPath, ["t3", "connect"]);
-      assert.include(error.errors[0]?.message ?? "", "missing T3 Connect public configuration");
+      assert.include(error.errors[0]?.message ?? "", "missing Ark Link public configuration");
 
       const output = (yield* TestConsole.errorLines).join("\n");
       assert.include(output, "ERROR");
-      assert.include(output, "missing T3 Connect public configuration");
+      assert.include(output, "missing Ark Link public configuration");
     }).pipe(Effect.provide(Layer.mergeAll(CliRuntimeLayer, TestConsole.layer))),
   );
 
@@ -230,10 +230,10 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         runConnectCli(["connect", "status", "--base-dir", baseDir]),
       );
 
-      assert.include(output, "T3 Connect\n  Exposure: disabled");
+      assert.include(output, "Ark Link\n  Exposure: disabled");
       assert.include(output, "  Authorization: missing");
       assert.include(output, "  Environment link: not provisioned");
-      assert.include(output, "Next: Run `t3 connect link` to authorize and enable T3 Connect.");
+      assert.include(output, "Next: Run `t3 connect link` to authorize and enable Ark Link.");
     }),
   );
 
@@ -266,7 +266,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         readonly authenticated: boolean;
       };
 
-      assert.equal(login.output, "Signed in to T3 Connect.");
+      assert.equal(login.output, "Signed in to Ark Link.");
       assert.isFalse(decoded.desired);
       assert.isTrue(decoded.authenticated);
     }),
@@ -281,7 +281,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         runConnectCli(["connect", "unlink", "--base-dir", baseDir]),
       );
 
-      assert.equal(output, "T3 Connect is disabled locally.");
+      assert.equal(output, "Ark Link is disabled locally.");
     }),
   );
 
@@ -299,7 +299,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
         runConnectCli(["connect", "logout", "--base-dir", baseDir]),
       );
 
-      assert.equal(output, "Signed out of T3 Connect locally.");
+      assert.equal(output, "Signed out of Ark Link locally.");
       assert.isFalse(NodeFS.existsSync(tokenPath));
     }),
   );
