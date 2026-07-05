@@ -2876,8 +2876,7 @@ interface SidebarProjectsContentProps {
 }
 
 function arkMachineLabel(session: ArkTmuxSession): string {
-  if (session.machineSelf) return "This device";
-  return session.machineName ?? session.machineIp ?? "This device";
+  return session.machineName ?? session.machineIp ?? "Local device";
 }
 
 function arkSessionKey(session: ArkTmuxSession): string {
@@ -2925,11 +2924,15 @@ function groupArkSessionsByMachine(
   }));
 }
 
-function providerMachineLabel(instanceId: string, displayName?: string): string {
+function providerMachineLabel(
+  instanceId: string,
+  displayName: string | undefined,
+  localLabel: string,
+): string {
   if (displayName?.trim()) {
     return displayName.trim().replace(/^(Codex|OpenCode|Terminal) on\s+/iu, "");
   }
-  if (instanceId === "codex") return "This device";
+  if (instanceId === "codex") return localLabel;
   return instanceId;
 }
 
@@ -2947,16 +2950,19 @@ function projectMachineLabel(
       memberThreads.length > 0
         ? memberThreads.map((thread) => thread.modelSelection.instanceId)
         : [member.defaultModelSelection?.instanceId];
+    const serverConfig = serverConfigs.get(member.environmentId);
+    const settings = serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS;
+    const localLabel = serverConfig?.environment.label ?? "Local device";
     for (const instanceId of instanceIds) {
       if (!instanceId) {
-        labels.add("This device");
+        labels.add(localLabel);
         continue;
       }
-      const settings = serverConfigs.get(member.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
       labels.add(
         providerMachineLabel(
           String(instanceId),
           settings.providerInstances[instanceId]?.displayName,
+          localLabel,
         ),
       );
     }
@@ -3062,6 +3068,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
   const ensureTmux = useAtomCommand(arkEnvironment.ensureTmux, { reportFailure: false });
   const [sessions, setSessions] = useState<ArkTmuxSession[]>([]);
   const [expandedMachines, setExpandedMachines] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedTerminalGroups, setExpandedTerminalGroups] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const projectMachineGroups = useMemo(
     () => groupProjectsByMachine(sortedProjects, serverConfigs, sidebarThreads),
     [serverConfigs, sidebarThreads, sortedProjects],
@@ -3106,6 +3115,13 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       for (const group of arkMachineGroups) next.add(group.key);
       return next;
     });
+    setExpandedTerminalGroups((current) => {
+      const next = new Set(current);
+      for (const group of arkMachineGroups) {
+        if (group.sessions.length > 0) next.add(group.key);
+      }
+      return next;
+    });
   }, [arkMachineGroups]);
 
   const openSession = useCallback(
@@ -3123,6 +3139,18 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
 
   const toggleMachine = useCallback((key: string) => {
     setExpandedMachines((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleTerminalGroup = useCallback((key: string) => {
+    setExpandedTerminalGroups((current) => {
       const next = new Set(current);
       if (next.has(key)) {
         next.delete(key);
@@ -3319,24 +3347,41 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                           </SortableProjectItem>
                         ))}
                         {group.sessions.length > 0 ? (
-                          <SidebarMenuItem className="px-6 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45">
-                            Terminals
-                          </SidebarMenuItem>
-                        ) : null}
-                        {group.sessions.map((session) => (
-                          <SidebarMenuItem key={arkSessionKey(session)}>
+                          <SidebarMenuItem className="pt-1">
                             <button
                               type="button"
-                              className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
-                              onClick={() => void openSession(session)}
+                              className="flex w-full items-center gap-1 rounded-md px-6 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45 transition-colors hover:bg-accent hover:text-foreground"
+                              onClick={() => toggleTerminalGroup(group.key)}
                             >
-                              <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                              <span className="min-w-0 flex-1 truncate font-medium">
-                                {session.name}
+                              <ChevronRightIcon
+                                className={cn(
+                                  "size-3 shrink-0 transition-transform",
+                                  expandedTerminalGroups.has(group.key) && "rotate-90",
+                                )}
+                              />
+                              <span className="truncate">Terminals</span>
+                              <span className="ml-auto text-[10px] text-muted-foreground/45">
+                                {group.sessions.length}
                               </span>
                             </button>
                           </SidebarMenuItem>
-                        ))}
+                        ) : null}
+                        {expandedTerminalGroups.has(group.key)
+                          ? group.sessions.map((session) => (
+                              <SidebarMenuItem key={arkSessionKey(session)}>
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
+                                  onClick={() => void openSession(session)}
+                                >
+                                  <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                                  <span className="min-w-0 flex-1 truncate font-medium">
+                                    {session.name}
+                                  </span>
+                                </button>
+                              </SidebarMenuItem>
+                            ))
+                          : null}
                       </>
                     ) : null}
                   </React.Fragment>
@@ -3399,24 +3444,41 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                       />
                     ))}
                     {group.sessions.length > 0 ? (
-                      <SidebarMenuItem className="px-6 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45">
-                        Terminals
-                      </SidebarMenuItem>
-                    ) : null}
-                    {group.sessions.map((session) => (
-                      <SidebarMenuItem key={arkSessionKey(session)}>
+                      <SidebarMenuItem className="pt-1">
                         <button
                           type="button"
-                          className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
-                          onClick={() => void openSession(session)}
+                          className="flex w-full items-center gap-1 rounded-md px-6 py-1 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground/45 transition-colors hover:bg-accent hover:text-foreground"
+                          onClick={() => toggleTerminalGroup(group.key)}
                         >
-                          <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                          <span className="min-w-0 flex-1 truncate font-medium">
-                            {session.name}
+                          <ChevronRightIcon
+                            className={cn(
+                              "size-3 shrink-0 transition-transform",
+                              expandedTerminalGroups.has(group.key) && "rotate-90",
+                            )}
+                          />
+                          <span className="truncate">Terminals</span>
+                          <span className="ml-auto text-[10px] text-muted-foreground/45">
+                            {group.sessions.length}
                           </span>
                         </button>
                       </SidebarMenuItem>
-                    ))}
+                    ) : null}
+                    {expandedTerminalGroups.has(group.key)
+                      ? group.sessions.map((session) => (
+                          <SidebarMenuItem key={arkSessionKey(session)}>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 rounded-md px-6 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-foreground"
+                              onClick={() => void openSession(session)}
+                            >
+                              <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                              <span className="min-w-0 flex-1 truncate font-medium">
+                                {session.name}
+                              </span>
+                            </button>
+                          </SidebarMenuItem>
+                        ))
+                      : null}
                   </>
                 ) : null}
               </React.Fragment>

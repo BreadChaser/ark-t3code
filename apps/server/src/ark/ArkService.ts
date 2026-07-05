@@ -8,6 +8,7 @@ import { parseTailscalePeers } from "@t3tools/tailscale";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as NodeOS from "node:os";
 
 import {
   buildCapturePaneCommand,
@@ -210,7 +211,7 @@ export const make = Effect.fn("ArkService.make")(function* () {
         self ??
         ({
           id: "local",
-          hostname: "This device",
+          hostname: NodeOS.hostname() || "Local device",
           tailscaleIp: "",
           online: true,
           isSelf: true,

@@ -3,6 +3,7 @@ import { ArkOperationError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as NodeOS from "node:os";
 
 import * as ArkService from "./ArkService.ts";
 import * as ProcessRunner from "../processRunner.ts";
@@ -82,6 +83,45 @@ describe("ArkService", () => {
             stdout: command.includes("tailscale ssh")
               ? "remote-main\t1\t0\t1783120013"
               : "local-main\t1\t0\t1783120001",
+            stderr: "",
+            code: ChildProcessSpawner.ExitCode(0),
+            timedOut: false,
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          });
+        }),
+      ),
+    ),
+  );
+
+  it.effect("uses the local hostname when tailscale inventory is unavailable", () =>
+    Effect.gen(function* () {
+      const ark = yield* ArkService.make();
+      const result = yield* ark.listTmuxSessions();
+      assert.deepEqual(
+        result.sessions.map((session) => ({
+          name: session.name,
+          machineName: session.machineName,
+          machineIp: session.machineIp,
+        })),
+        [{ name: "local-main", machineName: NodeOS.hostname(), machineIp: undefined }],
+      );
+    }).pipe(
+      Effect.provide(
+        testLayer((request) => {
+          const command = request.args[1] ?? "";
+          if (command.includes("tailscale status --json")) {
+            return Effect.succeed({
+              stdout: "",
+              stderr: "tailscale unavailable",
+              code: ChildProcessSpawner.ExitCode(1),
+              timedOut: false,
+              stdoutTruncated: false,
+              stderrTruncated: false,
+            });
+          }
+          return Effect.succeed({
+            stdout: "local-main\t1\t0\t1783120001",
             stderr: "",
             code: ChildProcessSpawner.ExitCode(0),
             timedOut: false,
